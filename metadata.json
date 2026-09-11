@@ -1,0 +1,6 @@
+{
+  "name": "MyMoney",
+  "description": "Private, local-first personal finance app that automatically reads bank SMS messages into an organized transaction dashboard with advanced duplicate protection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

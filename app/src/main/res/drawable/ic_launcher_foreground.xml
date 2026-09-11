@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Shield Glow -->
+    <path
+        android:fillColor="#1500D09C"
+        android:pathData="M54,22L78,32C78,54 67.5,69.5 54,76C40.5,69.5 30,54 30,32L54,22Z" />
+    <!-- Shield Border & Fill -->
+    <path
+        android:fillColor="#1A2744"
+        android:strokeWidth="2.5"
+        android:strokeColor="#00D09C"
+        android:pathData="M54,26L74,35C74,52.5 65.5,65.5 54,71C42.5,65.5 34,52.5 34,35L54,26Z" />
+    <!-- Stylized "M" rupee/dollar dynamic wave -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeWidth="4"
+        android:strokeColor="#00E676"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M43,56 L43,40 L54,51 L65,40 L65,56" />
+    <!-- Small security lock dot / dot accent -->
+    <path
+        android:fillColor="#38EF7D"
+        android:pathData="M54,61m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
+</vector>
