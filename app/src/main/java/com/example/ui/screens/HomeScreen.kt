@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.FinanceViewModel
+import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
 import com.example.ui.components.FintechCard
 import com.example.ui.components.MetricSummaryCard
@@ -66,6 +67,8 @@ fun HomeScreen(
     val bankOverview by viewModel.bankOverviewList.collectAsState()
     val currentMonth by viewModel.selectedMonth.collectAsState()
     val availableMonths by viewModel.availableMonths.collectAsState()
+    val discoveredBanks by viewModel.discoveredBanks.collectAsState()
+    val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
 
     var showMonthMenu by remember { mutableStateOf(false) }
 
@@ -185,6 +188,16 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        // Discovered Bank Selection Filter Chips
+        item {
+            BankFilterChipsRow(
+                discoveredBanks = discoveredBanks,
+                selectedBanks = selectedBanks,
+                onToggleBank = { viewModel.toggleBankFilter(it) },
+                onClearFilter = { viewModel.clearBankFilter() }
+            )
         }
 
         // 4 Summary Metrics (2x2 Grid)

@@ -75,7 +75,7 @@ object SmsParser {
 
     // Credit action keywords
     private val CREDIT_KEYWORDS = listOf(
-        "credited", "credit", "received from", "deposited", "salary",
+        "credited", "credit", "received", "received from", "received in", "deposited", "salary",
         "refund", "cashback", "reversed", "cr.", " cr "
     )
 
@@ -87,7 +87,7 @@ object SmsParser {
 
     // Account last 3 or 4 digits
     private val ACCOUNT_PATTERN = Pattern.compile(
-        """(?:a/c|acct|account|card|ending|xx)\s*(?:no\.?|num)?\s*[:\s#]*[xX*.]*(\d{3,4})""",
+        """(?:\ba/?c\b|acct|account|card|ending|xx)\s*(?:no\.?|num)?\s*[:\s#]*[xX*.]*(\d{3,4})""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -339,17 +339,17 @@ object SmsParser {
 
     private fun identifyBank(lowerSender: String, lowerBody: String): Pair<String, String> {
         return when {
-            lowerSender.contains("sbi") || lowerSender.contains("sbin") || lowerBody.contains("state bank of india") || lowerBody.contains("sbi ") ->
+            lowerSender.contains("sbi") || lowerSender.contains("sbin") || lowerBody.contains("state bank of india") || lowerBody.contains("sbi") ->
                 "SBI" to "State Bank of India"
-            lowerSender.contains("hdfc") || lowerBody.contains("hdfc bank") ->
+            lowerSender.contains("hdfc") || lowerBody.contains("hdfc") ->
                 "HDFC" to "HDFC Bank"
-            lowerSender.contains("icici") || lowerBody.contains("icici bank") ->
+            lowerSender.contains("icici") || lowerBody.contains("icici") ->
                 "ICICI" to "ICICI Bank"
-            lowerSender.contains("axis") || lowerSender.contains("utibr") || lowerBody.contains("axis bank") ->
+            lowerSender.contains("axis") || lowerSender.contains("utibr") || lowerBody.contains("axis") ->
                 "AXIS" to "Axis Bank"
-            lowerSender.contains("kotak") || lowerSender.contains("kmb") || lowerBody.contains("kotak mahindra") ->
+            lowerSender.contains("kotak") || lowerSender.contains("kmb") || lowerBody.contains("kotak") ->
                 "KOTAK" to "Kotak Mahindra Bank"
-            lowerSender.contains("idfc") || lowerSender.contains("idfcpb") || lowerBody.contains("idfc first") ->
+            lowerSender.contains("idfc") || lowerSender.contains("idfcpb") || lowerBody.contains("idfc") ->
                 "IDFC" to "IDFC FIRST Bank"
             lowerSender.contains("pnb") || lowerBody.contains("punjab national") ->
                 "OTHERS" to "Punjab National Bank"
@@ -408,6 +408,10 @@ object SmsParser {
                 clean = clean.substring(0, idx).trim()
             }
         }
+        val dotUpi = clean.indexOf(".upi", ignoreCase = true)
+        if (dotUpi > 0) clean = clean.substring(0, dotUpi).trim()
+        val dotRef = clean.indexOf(".ref", ignoreCase = true)
+        if (dotRef > 0) clean = clean.substring(0, dotRef).trim()
         val trailingStopWords = listOf("upi", "ref", "imps", "neft", "rtgs", "pos")
         for (tsw in trailingStopWords) {
             if (clean.endsWith(" $tsw", ignoreCase = true)) {

@@ -184,6 +184,16 @@ fun SmsAutoDetectionScreen(
                         lineHeight = 17.sp,
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Made in India 🇮🇳 developed by Ankit",
+                        color = EmeraldGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
             }
         }

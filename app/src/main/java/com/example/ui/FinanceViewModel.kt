@@ -84,6 +84,45 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val allCategories: StateFlow<List<CategoryEntity>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Discovered banks from transactions and registered banks
+    val discoveredBanks: StateFlow<List<String>> = combine(allTransactions, allBanks) { txList, bankList ->
+        val fromTx = txList.map { it.bankCode }.filter { it.isNotBlank() }
+        val fromBanks = bankList.map { it.code }.filter { it.isNotBlank() }
+        val combined = (fromTx + fromBanks).distinct().sorted()
+        if (combined.isNotEmpty()) combined else listOf("SBI", "HDFC", "ICICI", "AXIS", "KOTAK", "IDFC")
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Bank visibility selection: empty set means ALL banks visible
+    private val _selectedBanksFilter = MutableStateFlow<Set<String>>(emptySet())
+    val selectedBanksFilter: StateFlow<Set<String>> = _selectedBanksFilter.asStateFlow()
+
+    fun toggleBankFilter(bankCode: String) {
+        val current = _selectedBanksFilter.value.toMutableSet()
+        if (current.contains(bankCode)) {
+            current.remove(bankCode)
+        } else {
+            current.add(bankCode)
+        }
+        _selectedBanksFilter.value = current
+    }
+
+    fun clearBankFilter() {
+        _selectedBanksFilter.value = emptySet()
+    }
+
+    // Visible transactions filtered by bank visibility preference
+    // Does NOT delete transactions from Room DB; only filters in UI data streams
+    val visibleTransactions: StateFlow<List<TransactionEntity>> = combine(
+        allTransactions,
+        _selectedBanksFilter
+    ) { list, selectedBanks ->
+        if (selectedBanks.isEmpty()) {
+            list
+        } else {
+            list.filter { selectedBanks.contains(it.bankCode) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val detectionChecklist: StateFlow<LiveChecklistState> = smsManager.checklistState
     val isDetectionServiceActive: StateFlow<Boolean> = smsManager.isServiceActive
     val scanProgress: StateFlow<ScanProgress> = smsScanner.scanProgress
@@ -231,11 +270,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _selectedAccountFilter.value = "All Accounts"
         _minAmountFilter.value = null
         _maxAmountFilter.value = null
+        _selectedBanksFilter.value = emptySet()
     }
 
     // Filtered transactions for Transactions List screen
     val filteredTransactions: StateFlow<List<TransactionEntity>> = combine(
-        allTransactions,
+        visibleTransactions,
         selectedMonth,
         searchQuery,
         typeFilter,
@@ -283,7 +323,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Period summary metrics for Home Dashboard
     val periodSummary: StateFlow<PeriodSummary> = combine(
-        allTransactions,
+        visibleTransactions,
         selectedMonth
     ) { list, month ->
         var credit = 0.0
@@ -338,7 +378,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Bank-wise overview for Home Dashboard
     val bankOverviewList: StateFlow<List<BankOverviewItem>> = combine(
-        allTransactions,
+        visibleTransactions,
         selectedMonth
     ) { list, month ->
         val cal = Calendar.getInstance()
@@ -393,7 +433,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Category breakdown for Screen 8 (Spending Categories)
     val categoryBreakdown: StateFlow<List<CategorySpendItem>> = combine(
-        allTransactions,
+        visibleTransactions,
         selectedMonth
     ) { list, month ->
         val cal = Calendar.getInstance()
@@ -456,7 +496,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Monthly data for Bar Charts and Trends (Calculated dynamically based on timeFilter)
     val monthlyTrendsData: StateFlow<List<MonthlyBarData>> = combine(
-        allTransactions,
+        visibleTransactions,
         _trendsBank,
         timeFilter,
         customStartDate,
@@ -513,7 +553,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Weekly summary for Screen 9 (Weekly Bar chart W1-W5 calculated from real data)
     val weeklySummaryData: StateFlow<List<WeeklyBarData>> = combine(
-        allTransactions,
+        visibleTransactions,
         selectedMonth
     ) { list, month ->
         val cal = Calendar.getInstance()
@@ -540,7 +580,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     // Bank-wise Comparison data for Screen 4
     val bankWiseComparison: StateFlow<List<BankOverviewItem>> = combine(
-        allTransactions,
+        visibleTransactions,
         analyticsTab,
         timeFilter,
         customStartDate,

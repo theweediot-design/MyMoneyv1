@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -404,3 +406,71 @@ fun AppBottomNav(
         }
     }
 }
+
+@Composable
+fun BankFilterChipsRow(
+    discoveredBanks: List<String>,
+    selectedBanks: Set<String>,
+    onToggleBank: (String) -> Unit,
+    onClearFilter: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (discoveredBanks.isEmpty()) return
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val isAllSelected = selectedBanks.isEmpty()
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isAllSelected) EmeraldGreen else MaterialTheme.colorScheme.surface)
+                .border(
+                    1.dp,
+                    if (isAllSelected) EmeraldGreen else MaterialTheme.colorScheme.outline,
+                    RoundedCornerShape(20.dp)
+                )
+                .clickable { onClearFilter() }
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "All Banks",
+                color = if (isAllSelected) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
+                fontSize = 12.sp,
+                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
+            )
+        }
+
+        discoveredBanks.forEach { bankCode ->
+            val isSelected = selectedBanks.contains(bankCode)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(if (isSelected) EmeraldGreen else MaterialTheme.colorScheme.surface)
+                    .border(
+                        1.dp,
+                        if (isSelected) EmeraldGreen else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(20.dp)
+                    )
+                    .clickable { onToggleBank(bankCode) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                BankLogoBadge(bankCode = bankCode, size = 18)
+                Text(
+                    text = bankCode,
+                    color = if (isSelected) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+

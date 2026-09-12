@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TransactionEntity
 import com.example.ui.FinanceViewModel
+import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
 import com.example.ui.components.MonthSelectorPill
 import com.example.ui.theme.DebitRed
@@ -66,6 +67,8 @@ fun TransactionsListScreen(
     val currentMonth by viewModel.selectedMonth.collectAsState()
     val availableMonths by viewModel.availableMonths.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val discoveredBanks by viewModel.discoveredBanks.collectAsState()
+    val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
 
     var showSearchField by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
@@ -223,6 +226,16 @@ fun TransactionsListScreen(
                     }
                 }
             }
+        }
+
+        // Discovered Bank Selection Filter Chips
+        item {
+            BankFilterChipsRow(
+                discoveredBanks = discoveredBanks,
+                selectedBanks = selectedBanks,
+                onToggleBank = { viewModel.toggleBankFilter(it) },
+                onClearFilter = { viewModel.clearBankFilter() }
+            )
         }
 
         // Segmented Control: All | Credit | Debit

@@ -72,4 +72,36 @@ class SmsParserTest {
         assertEquals(450.0, parsed.amount, 0.001)
         assertEquals("", parsed.accountNumberLast4)
     }
+
+    @Test
+    fun testKotakReceivedCreditTransactionParsing() {
+        val body = "Received Rs.2.00 in your Kotak Bank AC 3453 from ANKIT CHAUDHARY on 12-09-26.UPI Ref:625576937179"
+        val testTimestamp = 1726130000000L
+        val parsed = SmsParser.parse(body, "VM-KOTAKB", testTimestamp)
+
+        assertEquals(ClassificationStatus.TRANSACTION, parsed.status)
+        assertTrue(parsed.isValidTransaction)
+        assertEquals(2.00, parsed.amount, 0.001)
+        assertEquals(com.example.data.model.TransactionType.CREDIT, parsed.type)
+        assertEquals("KOTAK", parsed.bankCode)
+        assertEquals("Kotak Mahindra Bank", parsed.bankName)
+        assertEquals("3453", parsed.accountNumberLast4)
+        assertEquals("625576937179", parsed.refNumber)
+        assertEquals("ANKIT CHAUDHARY", parsed.merchant)
+        assertEquals(testTimestamp, parsed.timestamp)
+        assertFalse(parsed.isFlaggedForReview)
+    }
+
+    @Test
+    fun testKotakReceivedCreditParsingWithUnknownSender() {
+        val body = "Received Rs.2.00 in your Kotak Bank AC 3453 from ANKIT CHAUDHARY on 12-09-26.UPI Ref:625576937179"
+        val parsed = SmsParser.parse(body, "", System.currentTimeMillis())
+
+        assertEquals(ClassificationStatus.TRANSACTION, parsed.status)
+        assertTrue(parsed.isValidTransaction)
+        assertEquals("KOTAK", parsed.bankCode)
+        assertEquals("3453", parsed.accountNumberLast4)
+        assertEquals("625576937179", parsed.refNumber)
+        assertEquals("ANKIT CHAUDHARY", parsed.merchant)
+    }
 }
