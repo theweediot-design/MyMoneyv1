@@ -86,7 +86,7 @@ fun BankLogoBadge(
         "BANDHAN" -> Color(0xFF0D9488) to "BDN"
         "PAYTM" -> Color(0xFF0EA5E9) to "PYTM"
         "AIRTEL" -> Color(0xFFEF4444) to "AIR"
-        "AUBANK" -> Color(0xFF7C3AED) to "AU"
+        "AU", "AUBANK" -> Color(0xFF7C3AED) to "AU"
         else -> Color(0xFF334155) to bankCode.take(2).uppercase()
     }
 

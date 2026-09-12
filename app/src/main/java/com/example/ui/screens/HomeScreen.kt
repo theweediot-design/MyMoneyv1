@@ -71,13 +71,14 @@ fun HomeScreen(
     val availableMonths by viewModel.availableMonths.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val allManageableBanks by viewModel.allManageableBanks.collectAsState()
     val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     var showMonthMenu by remember { mutableStateOf(false) }
 
     if (showManageBanksDialog) {
         ManageBanksDialog(
-            allBanks = discoveredBanks,
+            allBanks = allManageableBanks,
             activeBanks = selectedBanks,
             onDismiss = { viewModel.setShowManageBanksDialog(false) },
             onSave = {

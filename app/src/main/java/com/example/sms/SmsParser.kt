@@ -376,7 +376,7 @@ object SmsParser {
             lowerSender.contains("airtel") || lowerSender.contains("airtelpb") || lowerBody.contains("airtel payments") || lowerBody.contains("airtel bank") ->
                 "AIRTEL" to "Airtel Payments Bank"
             lowerSender.contains("aufinb") || lowerSender.contains("aubank") || lowerSender.contains("aubk") || lowerBody.contains("au small finance") || lowerBody.contains("au bank") ->
-                "AUBANK" to "AU Small Finance Bank"
+                "AU" to "AU Small Finance Bank"
             else -> "OTHERS" to "Other Bank"
         }
     }

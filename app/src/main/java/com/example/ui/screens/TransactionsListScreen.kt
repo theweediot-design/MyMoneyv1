@@ -71,6 +71,7 @@ fun TransactionsListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val allManageableBanks by viewModel.allManageableBanks.collectAsState()
     val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     var showSearchField by remember { mutableStateOf(false) }
@@ -89,7 +90,7 @@ fun TransactionsListScreen(
 
     if (showManageBanksDialog) {
         ManageBanksDialog(
-            allBanks = discoveredBanks,
+            allBanks = allManageableBanks,
             activeBanks = selectedBanks,
             onDismiss = { viewModel.setShowManageBanksDialog(false) },
             onSave = {

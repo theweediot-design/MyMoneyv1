@@ -123,7 +123,7 @@ class SmsParserTest {
             Triple("BNDHN", "Bandhan Bank: Rs 600.00 debited from A/C 6677 on 08-09-26", "BANDHAN"),
             Triple("PYTM", "Paytm Payments Bank: Rs.150.00 received in A/c 8811 from RAHUL", "PAYTM"),
             Triple("AIRTELPB", "Airtel Payments Bank: INR 200.00 debited from A/c 9922 on 10-09-26", "AIRTEL"),
-            Triple("AUFINB", "AU Small Finance Bank: Rs 1,800.00 credited to A/c 3344 on 11-09-26", "AUBANK")
+            Triple("AUFINB", "AU Small Finance Bank: Rs 1,800.00 credited to A/c 3344 on 11-09-26", "AU")
         )
 
         for ((sender, body, expectedBankCode) in testCases) {

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,6 +32,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +59,19 @@ fun ManageBanksDialog(
     onSave: (Set<String>) -> Unit
 ) {
     var currentSelection by remember { mutableStateOf(activeBanks.toSet()) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredBanks = remember(allBanks, searchQuery) {
+        if (searchQuery.isBlank()) {
+            allBanks
+        } else {
+            val q = searchQuery.trim().lowercase()
+            allBanks.filter { bankCode ->
+                val bankFullName = FinanceViewModel.ALL_BANK_NAMES[bankCode] ?: bankCode
+                bankCode.lowercase().contains(q) || bankFullName.lowercase().contains(q)
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -112,13 +128,45 @@ fun ManageBanksDialog(
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Select the banks you want to track. Only transactions from chosen banks appear in your dashboard, transactions, and analytics.",
+                    text = "Select the banks you want to track across your accounts, dashboard, transactions, and analytics.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
+                )
+
+                // Search field for Indian banks
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            "Search bank name or code...",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = EmeraldGreen,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    )
                 )
 
                 // Select All / Clear All Quick Action Bar
@@ -129,14 +177,14 @@ fun ManageBanksDialog(
                 ) {
                     TextButton(
                         onClick = { currentSelection = allBanks.toSet() },
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.height(30.dp)
                     ) {
-                        Text("Select All", fontSize = 12.sp, color = EmeraldGreen, fontWeight = FontWeight.SemiBold)
+                        Text("Select All (${allBanks.size})", fontSize = 12.sp, color = EmeraldGreen, fontWeight = FontWeight.SemiBold)
                     }
 
                     TextButton(
                         onClick = { currentSelection = emptySet() },
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.height(30.dp)
                     ) {
                         Text("Clear All", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                     }
@@ -146,10 +194,10 @@ fun ManageBanksDialog(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                        .heightIn(max = 300.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(allBanks) { bankCode ->
+                    items(filteredBanks, key = { it }) { bankCode ->
                         val isChecked = currentSelection.contains(bankCode)
                         val bankFullName = FinanceViewModel.ALL_BANK_NAMES[bankCode] ?: bankCode
 

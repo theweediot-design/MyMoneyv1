@@ -63,11 +63,12 @@ fun BankAnalyticsScreen(
     val customEndDate by viewModel.customEndDate.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val allManageableBanks by viewModel.allManageableBanks.collectAsState()
     val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     if (showManageBanksDialog) {
         ManageBanksDialog(
-            allBanks = discoveredBanks,
+            allBanks = allManageableBanks,
             activeBanks = selectedBanks,
             onDismiss = { viewModel.setShowManageBanksDialog(false) },
             onSave = {

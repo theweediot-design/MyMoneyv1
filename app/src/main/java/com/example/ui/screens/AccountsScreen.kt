@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,8 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AccountEntity
 import com.example.ui.FinanceViewModel
+import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
 import com.example.ui.components.FintechCard
+import com.example.ui.components.ManageBanksDialog
+import com.example.ui.components.NoBanksSelectedEmptyCard
 import com.example.ui.theme.EmeraldGreen
 import java.text.NumberFormat
 import java.util.Locale
@@ -56,10 +60,26 @@ fun AccountsScreen(
     onNavigateBack: () -> Unit,
     onAccountClick: (AccountEntity) -> Unit
 ) {
-    val accounts by viewModel.allAccounts.collectAsState()
-    val allTransactions by viewModel.allTransactions.collectAsState()
+    val accounts by viewModel.visibleAccounts.collectAsState()
+    val allTransactions by viewModel.visibleTransactions.collectAsState()
+    val discoveredBanks by viewModel.discoveredBanks.collectAsState()
+    val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val allManageableBanks by viewModel.allManageableBanks.collectAsState()
+    val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     var filterActiveOnly by remember { mutableStateOf(false) }
+
+    if (showManageBanksDialog) {
+        ManageBanksDialog(
+            allBanks = allManageableBanks,
+            activeBanks = selectedBanks,
+            onDismiss = { viewModel.setShowManageBanksDialog(false) },
+            onSave = {
+                viewModel.saveActiveBanks(it)
+                viewModel.setShowManageBanksDialog(false)
+            }
+        )
+    }
 
     val expandedBanks = remember {
         mutableStateMapOf<String, Boolean>()
@@ -90,102 +110,139 @@ fun AccountsScreen(
         item {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Top Header: Back Arrow + My Accounts
+            // Top Header: Back Arrow + My Accounts + Manage Banks button
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = "My Accounts",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 IconButton(
-                    onClick = onNavigateBack,
+                    onClick = { viewModel.setShowManageBanksDialog(true) },
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surface)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Manage Banks",
+                        tint = EmeraldGreen,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.width(16.dp))
+        // Bank Selection Filter Chips Row
+        item {
+            BankFilterChipsRow(
+                discoveredBanks = discoveredBanks,
+                selectedBanks = selectedBanks,
+                onToggleBank = { viewModel.toggleBankFilter(it) },
+                onClearFilter = { viewModel.clearBankFilter() },
+                onSelectAll = { viewModel.selectAllBanks() },
+                onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
+            )
+        }
 
-                Text(
-                    text = "My Accounts",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+        if (selectedBanks.isEmpty()) {
+            item {
+                NoBanksSelectedEmptyCard(
+                    onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
                 )
             }
-        }
-
-        // Filter chips: All Banks | Active
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (!filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.surface)
-                        .border(
-                            1.dp,
-                            if (!filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { filterActiveOnly = false }
-                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = "All Accounts (${accounts.size})",
-                        color = if (!filterActiveOnly) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.surface)
-                        .border(
-                            1.dp,
-                            if (filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { filterActiveOnly = true }
-                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = "Active (${accounts.count { it.isActive }})",
-                        color = if (filterActiveOnly) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        if (accounts.isEmpty()) {
+        } else {
+            // Filter chips: All Accounts | Active
             item {
-                FintechCard(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "No accounts found",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Scan your transactional SMS inbox from More > Auto SMS Detection to automatically discover and link your bank accounts.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (!filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.surface)
+                            .border(
+                                1.dp,
+                                if (!filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(20.dp)
+                            )
+                            .clickable { filterActiveOnly = false }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = "All Accounts (${accounts.size})",
+                            color = if (!filterActiveOnly) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.surface)
+                            .border(
+                                1.dp,
+                                if (filterActiveOnly) EmeraldGreen else MaterialTheme.colorScheme.outline,
+                                RoundedCornerShape(20.dp)
+                            )
+                            .clickable { filterActiveOnly = true }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = "Active (${accounts.count { it.isActive }})",
+                            color = if (filterActiveOnly) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
-        }
+
+            if (accounts.isEmpty()) {
+                item {
+                    FintechCard(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "No accounts found for selected banks",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Scan your transactional SMS inbox from More > Auto SMS Detection to discover bank accounts from your selected banks, or select more banks in Manage Banks.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
 
         // Expandable Bank Accordions
         items(groupedByBank) { (bankCode, bankAccounts) ->
@@ -291,9 +348,10 @@ fun AccountsScreen(
                 }
             }
         }
-
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-        }
     }
+
+    item {
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
 }
