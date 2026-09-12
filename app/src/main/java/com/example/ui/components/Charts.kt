@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.BankOverviewItem
@@ -348,111 +349,270 @@ fun WeeklyDualBarChart(
 @Composable
 fun BankComparisonBarChart(
     items: List<BankOverviewItem>,
+    mode: String = "BOTH",
     modifier: Modifier = Modifier
 ) {
-    val maxVal = (items.maxOfOrNull { it.totalAmount } ?: 100000.0).coerceAtLeast(10000.0)
+    val rawMax = when (mode) {
+        "CREDIT" -> items.maxOfOrNull { it.totalCredit } ?: 0.0
+        "DEBIT" -> items.maxOfOrNull { it.totalDebit } ?: 0.0
+        else -> items.maxOfOrNull { maxOf(it.totalCredit, it.totalDebit) } ?: 0.0
+    }.coerceAtLeast(1000.0)
+
+    val step = calculateNiceStep(rawMax, steps = 4)
+    val niceMax = step * 4
+
     var tooltip by remember { mutableStateOf<BarTooltipData?>(null) }
     val inrFormat = remember { NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply { maximumFractionDigits = 0 } }
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val textMutedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val tooltipBg = MaterialTheme.colorScheme.surface
     val tooltipBorder = MaterialTheme.colorScheme.outline
+    val creditBarColor = Color(0xFF00D09C)
+    val debitBarColor = Color(0xFFFF5A5F)
 
     Column(modifier = modifier) {
-        Box(
+        // Legend above the chart
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(190.dp)
-                .pointerInput(items) {
-                    detectTapGestures(
-                        onTap = { offset ->
-                            val w = size.width
-                            if (items.isEmpty() || w <= 0) return@detectTapGestures
-                            val slotWidth = w / items.size
-                            val index = (offset.x / slotWidth).toInt().coerceIn(0, items.size - 1)
-                            val item = items[index]
-                            tooltip = BarTooltipData(
-                                label = item.bankName,
-                                credit = null,
-                                debit = null,
-                                total = item.totalAmount,
-                                x = index * slotWidth + slotWidth / 2f
-                            )
-                        }
-                    )
-                }
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height - 30.dp.toPx()
+            if (mode == "BOTH" || mode == "CREDIT") {
+                Box(modifier = Modifier.size(8.dp).background(creditBarColor, CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Credit", color = textMutedColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+            if (mode == "BOTH") {
+                Spacer(modifier = Modifier.width(16.dp))
+            }
+            if (mode == "BOTH" || mode == "DEBIT") {
+                Box(modifier = Modifier.size(8.dp).background(debitBarColor, CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Debit", color = textMutedColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+        }
 
-                val steps = 4
-                for (i in 0..steps) {
-                    val y = (h / steps) * i
-                    drawLine(
-                        color = gridColor,
-                        start = Offset(0f, y),
-                        end = Offset(w, y),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
+        val chartHeight = 160.dp
 
-                if (items.isEmpty()) return@Canvas
-
-                val slotWidth = w / items.size
-                val barWidth = 14.dp.toPx()
-
-                items.forEachIndexed { index, item ->
-                    val centerX = slotWidth * index + slotWidth / 2f
-                    val barHeight = ((item.totalAmount / maxVal) * h).toFloat().coerceAtLeast(6.dp.toPx())
-                    val left = centerX - barWidth / 2f
-                    val top = h - barHeight
-
-                    drawRoundRect(
-                        color = EmeraldGreen,
-                        topLeft = Offset(left, top),
-                        size = Size(barWidth, barHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                    )
-                }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Y-Axis Numerical Scale Column
+            Column(
+                modifier = Modifier
+                    .width(44.dp)
+                    .height(chartHeight),
+                verticalArrangement = Arrangement.SpaceBetween,
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(formatCompactInr(niceMax), fontSize = 10.sp, color = textMutedColor, maxLines = 1)
+                Text(formatCompactInr(step * 3), fontSize = 10.sp, color = textMutedColor, maxLines = 1)
+                Text(formatCompactInr(step * 2), fontSize = 10.sp, color = textMutedColor, maxLines = 1)
+                Text(formatCompactInr(step * 1), fontSize = 10.sp, color = textMutedColor, maxLines = 1)
+                Text("₹0", fontSize = 10.sp, color = textMutedColor, maxLines = 1)
             }
 
-            tooltip?.let { tt ->
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Chart Canvas + X-Axis Labels Column
+            Column(modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
-                        .offset(
-                            x = (with(LocalDensity.current) { tt.x.toDp() } - 60.dp).coerceAtLeast(0.dp),
-                            y = 10.dp
-                        )
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(tooltipBg)
-                        .border(1.dp, tooltipBorder, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .clickable { tooltip = null }
+                        .fillMaxWidth()
+                        .height(chartHeight)
+                        .pointerInput(items, mode) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    val w = size.width
+                                    if (items.isEmpty() || w <= 0) return@detectTapGestures
+                                    val slotWidth = w / items.size
+                                    val index = (offset.x / slotWidth).toInt().coerceIn(0, items.size - 1)
+                                    val item = items[index]
+                                    tooltip = BarTooltipData(
+                                        label = item.bankName,
+                                        credit = if (mode == "DEBIT") null else item.totalCredit,
+                                        debit = if (mode == "CREDIT") null else item.totalDebit,
+                                        total = when (mode) {
+                                            "CREDIT" -> item.totalCredit
+                                            "DEBIT" -> item.totalDebit
+                                            else -> item.totalAmount
+                                        },
+                                        x = index * slotWidth + slotWidth / 2f
+                                    )
+                                }
+                            )
+                        }
                 ) {
-                    Column {
-                        Text(tt.label, color = textMutedColor, fontSize = 10.sp)
-                        tt.total?.let { Text("Amount: ${inrFormat.format(it)}", color = EmeraldGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val w = size.width
+                        val topPadding = 7.dp.toPx()
+                        val bottomPadding = 7.dp.toPx()
+                        val chartH = size.height - topPadding - bottomPadding
+                        val baselineY = size.height - bottomPadding
+
+                        // Draw 5 horizontal grid lines matching the 5 Y-axis scale markers
+                        val steps = 4
+                        for (i in 0..steps) {
+                            val y = topPadding + (chartH / steps) * i
+                            drawLine(
+                                color = gridColor,
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+
+                        if (items.isEmpty()) return@Canvas
+
+                        val slotWidth = w / items.size
+
+                        if (mode == "BOTH") {
+                            val gap = if (slotWidth < 40.dp.toPx()) 2.dp.toPx() else 3.dp.toPx()
+                            val available = (slotWidth - gap - 4.dp.toPx()).coerceAtLeast(6.dp.toPx())
+                            val barWidth = (available / 2f).coerceIn(3.dp.toPx(), 14.dp.toPx())
+
+                            items.forEachIndexed { index, item ->
+                                val centerX = slotWidth * index + slotWidth / 2f
+
+                                // Green Bar (#00D09C) representing Total Credit
+                                if (item.totalCredit > 0) {
+                                    val creditHeight = ((item.totalCredit / niceMax) * chartH).toFloat().coerceIn(3.dp.toPx(), chartH)
+                                    val creditLeft = centerX - gap / 2f - barWidth
+                                    val creditTop = baselineY - creditHeight
+                                    drawRoundRect(
+                                        color = creditBarColor,
+                                        topLeft = Offset(creditLeft, creditTop),
+                                        size = Size(barWidth, creditHeight),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                                    )
+                                }
+
+                                // Red Bar (#FF5A5F) representing Total Debit
+                                if (item.totalDebit > 0) {
+                                    val debitHeight = ((item.totalDebit / niceMax) * chartH).toFloat().coerceIn(3.dp.toPx(), chartH)
+                                    val debitLeft = centerX + gap / 2f
+                                    val debitTop = baselineY - debitHeight
+                                    drawRoundRect(
+                                        color = debitBarColor,
+                                        topLeft = Offset(debitLeft, debitTop),
+                                        size = Size(barWidth, debitHeight),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                                    )
+                                }
+                            }
+                        } else {
+                            // Single Bar for "CREDIT" or "DEBIT"
+                            val barWidth = (slotWidth * 0.45f).coerceIn(6.dp.toPx(), 18.dp.toPx())
+
+                            items.forEachIndexed { index, item ->
+                                val centerX = slotWidth * index + slotWidth / 2f
+                                val amount = if (mode == "CREDIT") item.totalCredit else item.totalDebit
+                                val barColor = if (mode == "CREDIT") creditBarColor else debitBarColor
+
+                                if (amount > 0) {
+                                    val barHeight = ((amount / niceMax) * chartH).toFloat().coerceIn(3.dp.toPx(), chartH)
+                                    val left = centerX - barWidth / 2f
+                                    val top = baselineY - barHeight
+                                    drawRoundRect(
+                                        color = barColor,
+                                        topLeft = Offset(left, top),
+                                        size = Size(barWidth, barHeight),
+                                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    tooltip?.let { tt ->
+                        Box(
+                            modifier = Modifier
+                                .offset(
+                                    x = (with(LocalDensity.current) { tt.x.toDp() } - 55.dp).coerceAtLeast(0.dp),
+                                    y = 4.dp
+                                )
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(tooltipBg)
+                                .border(1.dp, tooltipBorder, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .clickable { tooltip = null }
+                        ) {
+                            Column {
+                                Text(tt.label, color = textMutedColor, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                if (mode == "BOTH") {
+                                    tt.credit?.let { Text("Cr: ${inrFormat.format(it)}", color = creditBarColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                    tt.debit?.let { Text("Dr: ${inrFormat.format(it)}", color = debitBarColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                } else if (mode == "CREDIT") {
+                                    tt.credit?.let { Text("Credit: ${inrFormat.format(it)}", color = creditBarColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                } else {
+                                    tt.debit?.let { Text("Debit: ${inrFormat.format(it)}", color = debitBarColor, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // X-Axis Centered Bank Labels
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    items.forEach { item ->
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = item.bankCode,
+                                color = textMutedColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                items.forEach { item ->
-                    Text(
-                        text = item.bankCode,
-                        color = textMutedColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
         }
+    }
+}
+
+private fun calculateNiceStep(rawMax: Double, steps: Int = 4): Double {
+    if (rawMax <= 0.0) return 250.0
+    val roughStep = rawMax / steps
+    val exponent = kotlin.math.floor(kotlin.math.log10(roughStep))
+    val power = Math.pow(10.0, exponent)
+    val fraction = roughStep / power
+    val niceFraction = when {
+        fraction <= 1.0 -> 1.0
+        fraction <= 2.0 -> 2.0
+        fraction <= 2.5 -> 2.5
+        fraction <= 5.0 -> 5.0
+        else -> 10.0
+    }
+    return niceFraction * power
+}
+
+private fun formatCompactInr(value: Double): String {
+    if (value <= 0.0) return "₹0"
+    return when {
+        value >= 10000000.0 -> {
+            val cr = value / 10000000.0
+            if (cr >= 100 || cr == cr.toLong().toDouble()) "₹${cr.toLong()}Cr" else "₹${String.format(Locale.US, "%.1f", cr)}Cr"
+        }
+        value >= 100000.0 -> {
+            val l = value / 100000.0
+            if (l >= 100 || l == l.toLong().toDouble()) "₹${l.toLong()}L" else "₹${String.format(Locale.US, "%.1f", l)}L"
+        }
+        value >= 1000.0 -> {
+            val k = value / 1000.0
+            if (k >= 100 || k == k.toLong().toDouble()) "₹${k.toLong()}k" else "₹${String.format(Locale.US, "%.1f", k)}k"
+        }
+        else -> "₹${value.toInt()}"
     }
 }
 

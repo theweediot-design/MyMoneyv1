@@ -211,7 +211,10 @@ fun BankAnalyticsScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(14.dp))
-                    BankComparisonBarChart(items = bankItems)
+                    BankComparisonBarChart(
+                        items = bankItems,
+                        mode = analyticsTab
+                    )
                 }
             }
 
