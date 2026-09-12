@@ -204,8 +204,8 @@ object SmsParser {
         // Rule 7: Identify Bank reliably (Step A: Header, Step B: Body Fallback)
         val (bankCode, bankName) = identifyBank(sender, body)
 
-        // Rule 8: Extract Account Last 4 (Strict: never fabricate "0000")
-        val last4 = extractAccountLast4(body)
+        // Rule 8: Extract Account Last 4 (Strict: never fabricate "0000", excludes beneficiary/remitter accounts)
+        val last4 = extractAccountLast4(body, type)
 
         // Rule 9: Payment Method
         val method = determinePaymentMethod(lowerBody)
@@ -509,15 +509,101 @@ object SmsParser {
         return "OTHERS" to "Other Bank"
     }
 
-    fun extractAccountLast4(body: String): String {
+    data class AccountCandidate(
+        val last4: String,
+        val score: Int,
+        val startIndex: Int
+    )
+
+    fun extractAccountLast4(body: String, type: TransactionType = TransactionType.DEBIT): String {
         val matcher = BANK_ACCOUNT_PATTERN.matcher(body)
-        if (matcher.find()) {
-            val digits = matcher.group(1)
-            if (digits != null && digits.length in 3..4) {
-                return digits.padStart(4, '0')
+        val candidates = mutableListOf<AccountCandidate>()
+
+        while (matcher.find()) {
+            val digits = matcher.group(1) ?: continue
+            if (digits.length !in 3..4) continue
+            val padded = digits.padStart(4, '0')
+            val start = matcher.start()
+            val end = matcher.end()
+
+            // Analyze prefix (preceding text) and suffix (following text)
+            val prefix = body.substring(maxOf(0, start - 45), start).lowercase(Locale.ROOT)
+            val suffix = body.substring(end, minOf(body.length, end + 35)).lowercase(Locale.ROOT)
+
+            // Ignore candidate if it is part of a reference / UPI / txn number
+            val isRef = prefix.endsWith("ref ") || prefix.endsWith("ref:") ||
+                    prefix.endsWith("rrn ") || prefix.endsWith("rrn:") ||
+                    prefix.endsWith("txn ") || prefix.endsWith("txn:") ||
+                    prefix.endsWith("upi ref ") || prefix.endsWith("upi ref:") ||
+                    prefix.endsWith("upi ") || prefix.endsWith("ref no ") ||
+                    prefix.endsWith("ref no. ")
+            if (isRef) {
+                continue
             }
+
+            var score = 0
+
+            if (type == TransactionType.DEBIT) {
+                // In Debit SMS:
+                // Preceded by beneficiary indicators -> strongly penalize
+                val isBeneficiary = prefix.contains("to ") || prefix.contains("transfer to ") ||
+                        prefix.contains("transferred to ") || prefix.contains("sent to ") ||
+                        prefix.contains("paid to ") || prefix.contains("beneficiary") ||
+                        prefix.contains("cr to ")
+                val isSource = prefix.contains("from ") || prefix.contains("debited from ") ||
+                        prefix.contains("debited ") || prefix.contains("in your ") ||
+                        prefix.contains("withdrawn from ") || prefix.contains("spent on ") ||
+                        suffix.contains("debited") || suffix.contains("dr")
+
+                if (isBeneficiary && !isSource) {
+                    score -= 20
+                }
+                if (isSource) {
+                    score += 15
+                }
+            } else {
+                // In Credit SMS:
+                // Preceded by remitter/sender indicators -> strongly penalize
+                val isSender = prefix.contains("by transfer from ") || prefix.contains("received from ") ||
+                        (prefix.contains("from ") && !prefix.contains("in your ") && !prefix.contains("credited to "))
+                val isDestination = prefix.contains("in your ") || prefix.contains("to your ") ||
+                        prefix.contains("credited to ") || prefix.contains("credited in ") ||
+                        prefix.contains("received in ") || suffix.contains("credited") || suffix.contains("cr")
+
+                if (isSender && !isDestination) {
+                    score -= 20
+                }
+                if (isDestination) {
+                    score += 15
+                }
+            }
+
+            // Bank keyword proximity bonus
+            if (prefix.contains("bank") || prefix.contains("kotak") || prefix.contains("federal") ||
+                prefix.contains("sbi") || prefix.contains("hdfc") || prefix.contains("icici") ||
+                prefix.contains("axis") || prefix.contains("pnb") || prefix.contains("bob") ||
+                prefix.contains("canara") || prefix.contains("union")) {
+                score += 5
+            }
+
+            // "your a/c" bonus
+            if (prefix.contains("your ")) {
+                score += 5
+            }
+
+            candidates.add(AccountCandidate(padded, score, start))
         }
-        return ""
+
+        if (candidates.isEmpty()) return ""
+
+        // Discard any negative-score candidates (explicit beneficiary/sender accounts)
+        val validCandidates = candidates.filter { it.score >= 0 }
+        if (validCandidates.isEmpty()) {
+            return ""
+        }
+
+        // Return the candidate with the highest confidence score; if tied, return the first
+        return validCandidates.maxByOrNull { it.score }?.last4 ?: ""
     }
 
     private fun determinePaymentMethod(lowerBody: String): PaymentMethod {

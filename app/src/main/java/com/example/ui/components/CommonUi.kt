@@ -82,7 +82,7 @@ fun BankLogoBadge(
         "INDUSIND" -> Color(0xFF831843) to "IND"
         "IDFC" -> Color(0xFF7E22CE) to "IDFC"
         "YES" -> Color(0xFF2563EB) to "YES"
-        "FEDERAL" -> Color(0xFFF59E0B) to "FED"
+        "FEDERAL" -> Color(0xFFF59E0B) to "FB"
         "BANDHAN" -> Color(0xFF0D9488) to "BDN"
         "PAYTM" -> Color(0xFF0EA5E9) to "PYTM"
         "AIRTEL" -> Color(0xFFEF4444) to "AIR"

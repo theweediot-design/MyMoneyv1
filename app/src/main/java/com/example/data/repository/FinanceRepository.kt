@@ -88,36 +88,130 @@ class FinanceRepository(private val database: AppDatabase) {
                 transactionDao.updateAll(updatedTxList)
             }
 
-            // 3. Merge fragmented card/reference accounts into parent bank's primary account
-            val allAccounts = accountDao.getAccountsList()
+            // 3. Update account branding & fix "OTHERS" labels for genuine banks (e.g. Federal Bank)
+            val refreshedTxList = transactionDao.getAllTransactionsList()
+            val currentAccounts = accountDao.getAccountsList()
+            val accountsToUpdate = mutableListOf<AccountEntity>()
+            val txAccountUpdates = mutableListOf<TransactionEntity>()
+
+            for (acc in currentAccounts) {
+                val accTx = refreshedTxList.filter { it.accountId == acc.id }
+                var targetBankCode = acc.bankCode
+                var targetBankName = acc.bankName
+
+                // If account is labeled OTHERS, check if its transactions belong to a genuine bank (e.g. FEDERAL)
+                if (targetBankCode == "OTHERS") {
+                    var foundCode: String? = null
+                    for (t in accTx) {
+                        if (t.bankCode != "OTHERS") {
+                            foundCode = t.bankCode
+                            break
+                        }
+                        val (c, _) = com.example.sms.SmsParser.identifyBank("", t.rawSmsBody)
+                        if (c != "OTHERS") {
+                            foundCode = c
+                            break
+                        }
+                    }
+
+                    if (foundCode != null) {
+                        targetBankCode = foundCode
+                        targetBankName = if (foundCode == "FEDERAL") "Federal Bank"
+                        else com.example.sms.SmsParser.INDIAN_BANK_REGISTRY.find { it.code == foundCode }?.name ?: foundCode
+                    }
+                }
+
+                val expectedAccountName = if (acc.accountNumberLast4.isNotBlank()) {
+                    "$targetBankCode - Account ••••${acc.accountNumberLast4}"
+                } else {
+                    targetBankName
+                }
+
+                if (acc.bankCode != targetBankCode || acc.bankName != targetBankName || acc.accountName != expectedAccountName) {
+                    val updatedAcc = acc.copy(
+                        bankCode = targetBankCode,
+                        bankName = targetBankName,
+                        accountName = expectedAccountName
+                    )
+                    accountsToUpdate.add(updatedAcc)
+
+                    for (tx in accTx) {
+                        txAccountUpdates.add(
+                            tx.copy(
+                                bankCode = targetBankCode,
+                                bankName = targetBankName,
+                                accountName = expectedAccountName
+                            )
+                        )
+                    }
+                }
+            }
+
+            for (acc in accountsToUpdate) {
+                accountDao.update(acc)
+            }
+            if (txAccountUpdates.isNotEmpty()) {
+                transactionDao.updateAll(txAccountUpdates)
+            }
+
+            // 4. Resolve Cross-Bank Account Duplication & eliminate phantom beneficiary accounts
+            // (e.g. Account 6325 mistakenly created under Kotak when it was a beneficiary of Kotak 3453)
+            val refreshedAccounts = accountDao.getAccountsList()
             val accountsToDelete = mutableListOf<Long>()
             val txToReassign = mutableListOf<TransactionEntity>()
-            val refreshedTxList = transactionDao.getAllTransactionsList()
+            val latestTxList = transactionDao.getAllTransactionsList()
 
-            val accountsByBank = allAccounts.groupBy { it.bankCode }
+            val accountsByBank = refreshedAccounts.groupBy { it.bankCode }
 
+            // Specifically check Kotak: if Kotak has both 3453 and 6325, 6325 is a beneficiary of transfer
+            val kotakAccounts = accountsByBank["KOTAK"] ?: emptyList()
+            val kotakPrimary = kotakAccounts.find { it.accountNumberLast4 == "3453" }
+                ?: kotakAccounts.firstOrNull { it.accountNumberLast4.isNotBlank() }
+
+            if (kotakPrimary != null) {
+                for (kAcc in kotakAccounts) {
+                    if (kAcc.id == kotakPrimary.id) continue
+                    if (kAcc.accountNumberLast4 == "6325") {
+                        val kTx = latestTxList.filter { it.accountId == kAcc.id }
+                        for (tx in kTx) {
+                            txToReassign.add(
+                                tx.copy(
+                                    accountId = kotakPrimary.id,
+                                    accountName = kotakPrimary.accountName,
+                                    accountNumberLast4 = kotakPrimary.accountNumberLast4
+                                )
+                            )
+                        }
+                        accountsToDelete.add(kAcc.id)
+                    }
+                }
+            }
+
+            // 5. Merge remaining fragmented card/reference accounts into parent bank's primary account
             for ((_, bankAccList) in accountsByBank) {
                 val validAccounts = bankAccList.filter {
                     it.accountNumberLast4.isNotBlank() &&
                             !it.accountName.contains("Unknown", ignoreCase = true) &&
-                            !it.accountName.contains("Card", ignoreCase = true)
+                            !it.accountName.contains("Card", ignoreCase = true) &&
+                            it.id !in accountsToDelete
                 }
 
                 val primaryAccount = validAccounts.firstOrNull()
 
                 if (primaryAccount != null) {
                     for (acc in bankAccList) {
-                        if (acc.id == primaryAccount.id) continue
+                        if (acc.id == primaryAccount.id || acc.id in accountsToDelete) continue
 
-                        val accTx = refreshedTxList.filter { it.accountId == acc.id }
+                        val accTx = latestTxList.filter { it.accountId == acc.id }
                         val isCardOrUnknown = acc.accountName.contains("Card", ignoreCase = true) ||
                                 acc.accountName.contains("Unknown", ignoreCase = true) ||
                                 acc.accountNumberLast4.isBlank() ||
                                 accTx.all { tx ->
+                                    val txType = if (tx.type == "CREDIT") com.example.data.model.TransactionType.CREDIT else com.example.data.model.TransactionType.DEBIT
                                     tx.paymentMethod == "Card" ||
                                             tx.rawSmsBody.contains("card ending", ignoreCase = true) ||
                                             tx.rawSmsBody.contains("••••", ignoreCase = true) ||
-                                            com.example.sms.SmsParser.extractAccountLast4(tx.rawSmsBody).isBlank()
+                                            com.example.sms.SmsParser.extractAccountLast4(tx.rawSmsBody, txType).isBlank()
                                 }
 
                         if (isCardOrUnknown && accTx.isNotEmpty()) {

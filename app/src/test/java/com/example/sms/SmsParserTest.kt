@@ -234,5 +234,27 @@ class SmsParserTest {
             assertEquals("Failed for body fallback: ${input.second}", expectedBank, code)
         }
     }
+
+    @Test
+    fun testBeneficiaryAccountNotAssignedAsUserAccount() {
+        // Kotak debit transfer to beneficiary account 6325: must extract user's 3453, NEVER beneficiary 6325
+        val kotakTransfer = "Transfer to A/C 6325 of Rs 1,500 from your Kotak Bank AC 3453"
+        assertEquals("3453", SmsParser.extractAccountLast4(kotakTransfer, com.example.data.model.TransactionType.DEBIT))
+
+        val kotakDebitWithBeneficiary = "INR 500.00 debited from your Kotak Bank A/C 3453. Transfer to A/c 6325. UPI Ref: 625576937179"
+        assertEquals("3453", SmsParser.extractAccountLast4(kotakDebitWithBeneficiary, com.example.data.model.TransactionType.DEBIT))
+
+        // Paid to beneficiary with no source account: must return empty, NEVER treat beneficiary 6325 as user's account
+        val paidToBeneficiary = "Paid Rs 500 to A/C 6325 via UPI Ref 625576936325"
+        assertEquals("", SmsParser.extractAccountLast4(paidToBeneficiary, com.example.data.model.TransactionType.DEBIT))
+
+        // Federal Bank debit to beneficiary 6325: must extract source 7637, NOT 6325
+        val federalTransfer = "Federal Bank: Rs 500 debited from A/c 7637 to A/C 6325"
+        assertEquals("7637", SmsParser.extractAccountLast4(federalTransfer, com.example.data.model.TransactionType.DEBIT))
+
+        // Genuine Federal Bank credit to 6325: must extract user destination account 6325
+        val federalCredit = "Received Rs 1,000 in your Federal Bank A/c 6325 from ANKIT"
+        assertEquals("6325", SmsParser.extractAccountLast4(federalCredit, com.example.data.model.TransactionType.CREDIT))
+    }
 }
 

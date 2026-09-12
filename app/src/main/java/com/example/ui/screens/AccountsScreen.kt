@@ -307,6 +307,12 @@ fun AccountsScreen(
                             val totalDebits = accountTx.filter { it.type == "DEBIT" }.sumOf { it.amount }
                             val displayBalance = totalCredits - totalDebits
 
+                            val displayTitle = if (account.accountName.startsWith("OTHERS") && account.bankCode != "OTHERS") {
+                                "${account.bankCode} - Account ••••${account.accountNumberLast4}"
+                            } else {
+                                account.accountName
+                            }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -323,37 +329,44 @@ fun AccountsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = account.accountName,
-                                            color = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        if (isHidden) {
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(MaterialTheme.colorScheme.surface)
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = "Hidden",
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    BankLogoBadge(bankCode = account.bankCode, size = 32)
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = displayTitle,
+                                                color = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            if (isHidden) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(MaterialTheme.colorScheme.surface)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Hidden",
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
                                             }
                                         }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "••••${account.accountNumberLast4}",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 11.sp
+                                        )
                                     }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "••••${account.accountNumberLast4}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 11.sp
-                                    )
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
