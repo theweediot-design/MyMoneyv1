@@ -3,11 +3,15 @@ package com.example.sms
 import android.content.Context
 import com.example.data.local.AppDatabase
 import com.example.data.model.TransactionEntity
+import com.example.data.preferences.BankPreferenceManager
+import com.example.util.NotificationHelper
+import com.example.util.VoiceAlertManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 
 data class LiveChecklistState(
     val step1Detected: Boolean = false,
@@ -24,6 +28,7 @@ class SmsDetectionManager private constructor(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val db = AppDatabase.getDatabase(context)
     private val dedupEngine = DeduplicationEngine(db.transactionDao(), db.accountDao())
+    private val bankPrefManager = BankPreferenceManager(context)
 
     private val _checklistState = MutableStateFlow(LiveChecklistState())
     val checklistState: StateFlow<LiveChecklistState> = _checklistState.asStateFlow()
@@ -99,6 +104,21 @@ class SmsDetectionManager private constructor(private val context: Context) {
             statusMessage = finalMsg,
             lastTransaction = tx
         )
+
+        // Trigger Local Push Notification and Voice Alert for new or merged transaction
+        if (result is DeduplicationResult.Created || result is DeduplicationResult.Merged) {
+            try {
+                NotificationHelper.showTransactionNotification(context, tx)
+            } catch (_: Exception) {}
+
+            try {
+                val voiceAlertsEnabled = bankPrefManager.voiceAlertsEnabledFlow.first()
+                if (voiceAlertsEnabled) {
+                    val isCredit = tx.type.equals("CREDIT", ignoreCase = true)
+                    VoiceAlertManager.playVoiceAlert(context, isCredit)
+                }
+            } catch (_: Exception) {}
+        }
 
         return result
     }

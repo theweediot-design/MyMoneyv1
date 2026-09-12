@@ -53,6 +53,7 @@ import com.example.ui.components.MonthSelectorPill
 import com.example.ui.components.NoBanksSelectedEmptyCard
 import com.example.ui.theme.DebitRed
 import com.example.ui.theme.EmeraldGreen
+import com.example.util.DateGroupingUtils
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,6 +87,10 @@ fun TransactionsListScreen(
 
     val dateFormatter = remember {
         SimpleDateFormat("d MMM, hh:mm a", Locale.getDefault())
+    }
+
+    val groupedTransactions = remember(transactions) {
+        DateGroupingUtils.groupTransactions(transactions)
     }
 
     if (showManageBanksDialog) {
@@ -322,60 +327,71 @@ fun TransactionsListScreen(
                         )
                     }
                 }
-            }
-
-            // Transaction items
-            items(transactions, key = { it.id }) { tx ->
-                val isCredit = tx.type == "CREDIT"
-                val sign = if (isCredit) "+" else "-"
-                val amountColor = if (isCredit) EmeraldGreen else DebitRed
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                        .clickable { onTransactionClick(tx) }
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BankLogoBadge(bankCode = tx.bankCode, size = 38)
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
+            } else {
+                groupedTransactions.forEach { group ->
+                    item(key = "header_${group.headerTitle}") {
                         Text(
-                            text = tx.merchant.ifBlank { tx.categoryName },
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = "${tx.accountName} • ${tx.paymentMethod}",
+                            text = group.headerTitle,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp,
-                            maxLines = 1
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp, start = 2.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    items(group.transactions, key = { it.id }) { tx ->
+                        val isCredit = tx.type == "CREDIT"
+                        val sign = if (isCredit) "+" else "-"
+                        val amountColor = if (isCredit) EmeraldGreen else DebitRed
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "$sign${inrFormat.format(tx.amount)}",
-                            color = amountColor,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = dateFormatter.format(Date(tx.timestamp)),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 10.sp
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                                .clickable { onTransactionClick(tx) }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BankLogoBadge(bankCode = tx.bankCode, size = 38)
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = tx.merchant.ifBlank { tx.categoryName },
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "${tx.accountName} • ${tx.paymentMethod}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "$sign${inrFormat.format(tx.amount)}",
+                                    color = amountColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = dateFormatter.format(Date(tx.timestamp)),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
                     }
                 }
             }

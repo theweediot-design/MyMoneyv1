@@ -51,6 +51,10 @@ import com.example.ui.screens.TransactionsListScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.ThemeManager
 
+import android.os.Build
+import com.example.util.NotificationHelper
+import com.example.util.VoiceAlertManager
+
 class MainActivity : FragmentActivity() {
 
     private lateinit var securityManager: SecurityManager
@@ -61,6 +65,15 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        NotificationHelper.createNotificationChannel(this)
+        VoiceAlertManager.initTts(this)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
 
         securityManager = SecurityManager(this)
         themeManager = ThemeManager(this)
@@ -314,7 +327,7 @@ fun MainAppContent(
                     onNavigateBack = { navigateBack() },
                     onBankClick = {
                         viewModel.setTrendsBank(it)
-                        navigateTo("TRENDS")
+                        navigateTo("ACCOUNTS")
                     }
                 )
 

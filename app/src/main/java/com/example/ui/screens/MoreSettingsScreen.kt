@@ -24,11 +24,14 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -56,6 +59,7 @@ fun MoreSettingsScreen(
 ) {
     val context = LocalContext.current
     val currentTheme by themeManager.currentTheme.collectAsState()
+    val isVoiceAlertsEnabled by viewModel.isVoiceAlertsEnabled.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -102,18 +106,8 @@ fun MoreSettingsScreen(
                     icon = Icons.Default.BarChart,
                     iconTint = Color(0xFF38BDF8),
                     title = "Bank-wise Analysis",
-                    subtitle = "Compare credit, debit & net flows across banks",
+                    subtitle = "Compare credit & debit flows across banks",
                     onClick = { onNavigate("ANALYTICS_BANK") }
-                )
-
-                DividerLine()
-
-                SettingsNavRow(
-                    icon = Icons.Default.Timeline,
-                    iconTint = Color(0xFFA855F7),
-                    title = "Bank-wise Trends",
-                    subtitle = "Interactive line graphs across months",
-                    onClick = { onNavigate("TRENDS") }
                 )
 
                 DividerLine()
@@ -147,6 +141,63 @@ fun MoreSettingsScreen(
                     subtitle = "Background listener, parser & deduplication engine",
                     onClick = { onNavigate("SMS_DETECTION") }
                 )
+
+                DividerLine()
+
+                // Voice Audio Alerts Toggle Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setVoiceAlertsEnabled(!isVoiceAlertsEnabled) }
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column {
+                            Text(
+                                text = "Voice Audio Alerts",
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Speak 'पैसे आ गए/कट गए ओए!' on transaction",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = isVoiceAlertsEnabled,
+                        onCheckedChange = { viewModel.setVoiceAlertsEnabled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = EmeraldGreen
+                        )
+                    )
+                }
 
                 DividerLine()
 

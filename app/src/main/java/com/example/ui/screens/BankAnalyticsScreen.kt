@@ -94,7 +94,7 @@ fun BankAnalyticsScreen(
         }
     }
 
-    val tabs = listOf("CREDIT" to "Credit", "DEBIT" to "Debit", "NET" to "Net")
+    val tabs = listOf("CREDIT" to "Credit", "DEBIT" to "Debit", "BOTH" to "Both")
 
     LazyColumn(
         modifier = Modifier
@@ -204,7 +204,7 @@ fun BankAnalyticsScreen(
                         text = when (analyticsTab) {
                             "CREDIT" -> "Bank-wise Inflow (Credit)"
                             "DEBIT" -> "Bank-wise Outflow (Debit)"
-                            else -> "Bank-wise Net Flow"
+                            else -> "Bank-wise Credit & Debit Breakdown"
                         },
                         color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp,
@@ -243,7 +243,7 @@ fun BankAnalyticsScreen(
                             text = when (analyticsTab) {
                                 "CREDIT" -> "Credit Amount"
                                 "DEBIT" -> "Debit Amount"
-                                else -> "Net Amount"
+                                else -> "Total Flow"
                             },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
@@ -285,12 +285,29 @@ fun BankAnalyticsScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = inrFormat.format(item.totalAmount),
-                            color = if (analyticsTab == "DEBIT") DebitRed else EmeraldGreen,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        if (analyticsTab == "BOTH") {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = "Cr: ${inrFormat.format(item.totalCredit)}",
+                                    color = EmeraldGreen,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Dr: ${inrFormat.format(item.totalDebit)}",
+                                    color = DebitRed,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = inrFormat.format(item.totalAmount),
+                                color = if (analyticsTab == "DEBIT") DebitRed else EmeraldGreen,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.ChevronRight,

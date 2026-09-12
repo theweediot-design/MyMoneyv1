@@ -348,6 +348,22 @@ fun SmsAutoDetectionScreen(
         }
 
         item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Made in India 🇮🇳 developed by Ankit",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        item {
             Spacer(modifier = Modifier.height(24.dp))
         }
     }

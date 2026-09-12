@@ -21,6 +21,7 @@ class BankPreferenceManager(private val context: Context) {
         val KEY_ACTIVE_BANKS = stringSetPreferencesKey("active_banks_filter")
         val KEY_IS_USER_CONFIGURED = booleanPreferencesKey("is_user_configured")
         val KEY_HIDDEN_ACCOUNT_IDS = stringSetPreferencesKey("hidden_account_ids")
+        val KEY_VOICE_ALERTS_ENABLED = booleanPreferencesKey("voice_alerts_enabled")
     }
 
     /**
@@ -123,6 +124,24 @@ class BankPreferenceManager(private val context: Context) {
         context.bankDataStore.edit { preferences ->
             preferences.remove(KEY_ACTIVE_BANKS)
             preferences.remove(KEY_IS_USER_CONFIGURED)
+        }
+    }
+
+    val voiceAlertsEnabledFlow: Flow<Boolean> = context.bankDataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_VOICE_ALERTS_ENABLED] ?: true
+        }
+
+    suspend fun setVoiceAlertsEnabled(enabled: Boolean) {
+        context.bankDataStore.edit { preferences ->
+            preferences[KEY_VOICE_ALERTS_ENABLED] = enabled
         }
     }
 }

@@ -69,14 +69,14 @@ object SmsParser {
 
     // Debit action keywords
     private val DEBIT_KEYWORDS = listOf(
-        "debited", "debit", "spent", "paid to", "sent to", "transferred to", "transferred",
-        "withdrawn", "purchase", "charged", "deducted", "dr.", " dr ", "dr:"
+        "debited", "debit", "spent", "paid to", "paid", "sent to", "sent rs", "sent inr", "sent ₹", "sent",
+        "transferred to", "transferred", "withdrawn", "purchase", "charged", "deducted", "dr.", " dr ", "dr:"
     )
 
     // Credit action keywords
     private val CREDIT_KEYWORDS = listOf(
-        "credited", "credit", "received", "received from", "received in", "deposited", "salary",
-        "refund", "cashback", "reversed", "cr.", " cr ", "cr:"
+        "credited", "credit", "received", "received from", "received in", "received rs", "received inr", "received ₹",
+        "deposited", "salary", "refund", "cashback", "reversed", "cr.", " cr ", "cr:"
     )
 
     // Amount regex matching amounts with Rs, INR or ₹ symbols
@@ -86,8 +86,9 @@ object SmsParser {
     )
 
     // Strict Bank Account number pattern (A/C, AC, Account, a/c no., acct - NEVER matches cards)
+    // Supports variable X masking: "A/c X3453", "Ac XX3453", "A/c ...3453", "Kotak Bank AC 3453"
     private val BANK_ACCOUNT_PATTERN = Pattern.compile(
-        """\b(?:a/?c|ac|acct|account)(?:\s*no\.?|\s*num|\s*ending|\s*ending\s*in)?\s*[:\s#.]*[xX*.]*(\d{3,4})\b""",
+        """\b(?:a/?c|ac|acct|account)(?:\s*no\.?|\s*num|\s*ending|\s*ending\s*in)?\s*[:\s#.]*[xX*.]*\s*(\d{3,4})\b""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -332,12 +333,19 @@ object SmsParser {
     }
 
     private fun determinePrecedence(lowerBody: String): TransactionType {
+        val trimmed = lowerBody.trim()
+        if (trimmed.startsWith("sent ") || trimmed.startsWith("sent rs") || trimmed.startsWith("sent inr") || trimmed.startsWith("sent ₹")) {
+            return TransactionType.DEBIT
+        }
+        if (trimmed.startsWith("received ") || trimmed.startsWith("received rs") || trimmed.startsWith("received inr") || trimmed.startsWith("received ₹")) {
+            return TransactionType.CREDIT
+        }
         val debitIdx = lowerBody.indexOf("debited")
         val creditIdx = lowerBody.indexOf("credited")
         return when {
             debitIdx != -1 && (creditIdx == -1 || debitIdx < creditIdx) -> TransactionType.DEBIT
             creditIdx != -1 -> TransactionType.CREDIT
-            lowerBody.contains("spent") || lowerBody.contains("paid") -> TransactionType.DEBIT
+            lowerBody.contains("spent") || lowerBody.contains("paid") || lowerBody.contains("sent ") -> TransactionType.DEBIT
             lowerBody.contains("received") || lowerBody.contains("deposited") -> TransactionType.CREDIT
             else -> TransactionType.DEBIT
         }

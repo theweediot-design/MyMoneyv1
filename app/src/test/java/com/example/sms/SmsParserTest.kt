@@ -256,5 +256,28 @@ class SmsParserTest {
         val federalCredit = "Received Rs 1,000 in your Federal Bank A/c 6325 from ANKIT"
         assertEquals("6325", SmsParser.extractAccountLast4(federalCredit, com.example.data.model.TransactionType.CREDIT))
     }
+
+    @Test
+    fun testSentDebitTransactionParsing() {
+        val body = "Sent Rs.500.00 from SBI A/c X3453 to Amit on 12-09-26. UPI Ref 625576937179"
+        val parsed = SmsParser.parse(body, "SBIINB", System.currentTimeMillis())
+
+        assertEquals(ClassificationStatus.TRANSACTION, parsed.status)
+        assertTrue(parsed.isValidTransaction)
+        assertEquals(500.0, parsed.amount, 0.001)
+        assertEquals(com.example.data.model.TransactionType.DEBIT, parsed.type)
+        assertEquals("SBI", parsed.bankCode)
+        assertEquals("3453", parsed.accountNumberLast4)
+        assertEquals("Amit", parsed.merchant)
+        assertEquals("625576937179", parsed.refNumber)
+    }
+
+    @Test
+    fun testVariableXMasking() {
+        assertEquals("3453", SmsParser.extractAccountLast4("debited from A/c X3453", com.example.data.model.TransactionType.DEBIT))
+        assertEquals("3453", SmsParser.extractAccountLast4("debited from Ac XX3453", com.example.data.model.TransactionType.DEBIT))
+        assertEquals("3453", SmsParser.extractAccountLast4("debited from A/c ...3453", com.example.data.model.TransactionType.DEBIT))
+        assertEquals("3453", SmsParser.extractAccountLast4("in your Kotak Bank AC 3453", com.example.data.model.TransactionType.CREDIT))
+    }
 }
 

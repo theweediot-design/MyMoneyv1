@@ -51,6 +51,7 @@ import com.example.ui.theme.AccentBlue
 import com.example.ui.theme.AccentPurple
 import com.example.ui.theme.DebitRed
 import com.example.ui.theme.EmeraldGreen
+import com.example.util.DateGroupingUtils
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -64,7 +65,7 @@ fun AccountDetailScreen(
     onNavigateToTransactions: () -> Unit,
     onTransactionClick: (TransactionEntity) -> Unit
 ) {
-    val account = viewModel.selectedAccount.collectAsState().value
+    val account by viewModel.selectedAccount.collectAsState()
     val allTransactions by viewModel.allTransactions.collectAsState()
     val timeFilter by viewModel.timeFilter.collectAsState()
     val showDateRangeDialog by viewModel.showDateRangeDialog.collectAsState()
@@ -92,11 +93,13 @@ fun AccountDetailScreen(
 
     val accountTransactions = remember(account, allTransactions, timeFilter, customStartDate, customEndDate) {
         if (account == null) emptyList()
-        else allTransactions.filter { tx ->
-            val matchesAccount = tx.accountId == account.id ||
-                    (account.accountNumberLast4.isNotBlank() && tx.accountNumberLast4 == account.accountNumberLast4) ||
-                    (account.bankCode.equals(tx.bankCode, ignoreCase = true) && account.accountName.equals(tx.accountName, ignoreCase = true))
-            matchesAccount && viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)
+        else {
+            allTransactions.filter { tx ->
+                val matches = tx.accountId == account?.id ||
+                        (account?.accountNumberLast4?.isNotBlank() == true && tx.accountNumberLast4 == account?.accountNumberLast4) ||
+                        (account?.bankCode.equals(tx.bankCode, ignoreCase = true) && account?.accountName.equals(tx.accountName, ignoreCase = true))
+                matches && viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)
+            }.sortedByDescending { it.timestamp }
         }
     }
 
@@ -131,9 +134,9 @@ fun AccountDetailScreen(
                 var credit = 0.0
                 var debit = 0.0
                 for (tx in allTransactions) {
-                    val matchesAccount = tx.accountId == account.id ||
-                            (account.accountNumberLast4.isNotBlank() && tx.accountNumberLast4 == account.accountNumberLast4) ||
-                            (account.bankCode.equals(tx.bankCode, ignoreCase = true) && account.accountName.equals(tx.accountName, ignoreCase = true))
+                    val matchesAccount = tx.accountId == account?.id ||
+                            (account?.accountNumberLast4?.isNotBlank() == true && tx.accountNumberLast4 == account?.accountNumberLast4) ||
+                            (account?.bankCode.equals(tx.bankCode, ignoreCase = true) && account?.accountName.equals(tx.accountName, ignoreCase = true))
                     if (matchesAccount && viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)) {
                         cal.timeInMillis = tx.timestamp
                         if (cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
@@ -154,8 +157,11 @@ fun AccountDetailScreen(
         accountTransactions.filter { it.type == "DEBIT" }.sumOf { it.amount }
     }
 
-    val netInflow = totalCredit - totalDebit
     val txCount = accountTransactions.size
+
+    val groupedRecent = remember(accountTransactions) {
+        DateGroupingUtils.groupTransactions(accountTransactions.take(15))
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -231,7 +237,7 @@ fun AccountDetailScreen(
             )
         }
 
-        // 4 Metric cards (2x2 grid)
+        // 3 Balanced Summary Metrics: Total Credit, Total Debit, Total Transactions count
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -259,29 +265,44 @@ fun AccountDetailScreen(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricSummaryCard(
-                        title = "Net Inflow",
-                        amount = inrFormat.format(netInflow),
-                        badgeText = null,
-                        icon = Icons.Default.AccountBalanceWallet,
-                        iconColor = AccentBlue,
-                        iconBgColor = AccentBlue.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MetricSummaryCard(
-                        title = "Transactions",
-                        amount = txCount.toString(),
-                        badgeText = null,
-                        icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                        iconColor = AccentPurple,
-                        iconBgColor = AccentPurple.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
+                FintechCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(AccentPurple.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                                    contentDescription = null,
+                                    tint = AccentPurple,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Total Transactions",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "$txCount transactions",
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -333,57 +354,67 @@ fun AccountDetailScreen(
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
             }
-        }
-
-        val displayTxList = accountTransactions.take(5)
-        items(displayTxList) { tx ->
-            val isCredit = tx.type == "CREDIT"
-            val sign = if (isCredit) "+" else "-"
-            val amountColor = if (isCredit) EmeraldGreen else DebitRed
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
-                    .clickable { onTransactionClick(tx) }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BankLogoBadge(bankCode = tx.bankCode, size = 38)
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
+        } else {
+            groupedRecent.forEach { group ->
+                item(key = "header_${group.headerTitle}") {
                     Text(
-                        text = tx.merchant.ifBlank { tx.categoryName },
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${tx.categoryName} • ${tx.paymentMethod}",
+                        text = group.headerTitle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp, start = 2.dp)
                     )
                 }
+                items(group.transactions, key = { it.id }) { tx ->
+                    val isCredit = tx.type == "CREDIT"
+                    val sign = if (isCredit) "+" else "-"
+                    val amountColor = if (isCredit) EmeraldGreen else DebitRed
 
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "$sign${inrFormat.format(tx.amount)}",
-                        color = amountColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = dateFormatter.format(Date(tx.timestamp)),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                            .clickable { onTransactionClick(tx) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BankLogoBadge(bankCode = tx.bankCode, size = 38)
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = tx.merchant.ifBlank { tx.categoryName },
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${tx.categoryName} • ${tx.paymentMethod}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "$sign${inrFormat.format(tx.amount)}",
+                                color = amountColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = dateFormatter.format(Date(tx.timestamp)),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -225,7 +225,7 @@ fun HomeScreen(
                 )
             }
         } else {
-            // 4 Summary Metrics (2x2 Grid)
+            // 3 Balanced Summary Metrics: Total Credit, Total Debit, Total Transactions count
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -255,29 +255,59 @@ fun HomeScreen(
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        MetricSummaryCard(
-                            title = "Net Flow",
-                            amount = inrFormat.format(summary.netFlow),
-                            badgeText = null,
-                            icon = Icons.Default.AccountBalanceWallet,
-                            iconColor = AccentBlue,
-                            iconBgColor = AccentBlue.copy(alpha = 0.15f),
-                            modifier = Modifier.weight(1f)
-                        )
+                    // Total Transactions Card
+                    FintechCard(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(AccentPurple.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                                        contentDescription = null,
+                                        tint = AccentPurple,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Total Transactions",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${summary.transactionCount} transactions",
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
 
-                        MetricSummaryCard(
-                            title = "Transactions",
-                            amount = summary.transactionCount.toString(),
-                            badgeText = null,
-                            icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                            iconColor = AccentPurple,
-                            iconBgColor = AccentPurple.copy(alpha = 0.15f),
-                            modifier = Modifier.weight(1f)
-                        )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "This Month",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -381,44 +411,39 @@ fun HomeScreen(
                                         },
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    BankLogoBadge(bankCode = item.bankCode, size = 32)
+                                    BankLogoBadge(bankCode = item.bankCode, size = 34)
                                     Spacer(modifier = Modifier.width(10.dp))
 
-                                    Text(
-                                        text = item.bankName,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.width(90.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(10.dp))
-
-                                    // Colored pill progress bar
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth(item.proportion)
-                                                .height(6.dp)
-                                                .clip(RoundedCornerShape(3.dp))
-                                                .background(barColor)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.bankName,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "${item.txCount} transactions",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 11.sp
                                         )
                                     }
 
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Text(
-                                        text = inrFormat.format(item.totalAmount),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Cr: ${inrFormat.format(item.totalCredit)}",
+                                            color = EmeraldGreen,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Dr: ${inrFormat.format(item.totalDebit)}",
+                                            color = DebitRed,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }

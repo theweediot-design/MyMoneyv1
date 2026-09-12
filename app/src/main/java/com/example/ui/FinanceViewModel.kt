@@ -44,7 +44,9 @@ data class BankOverviewItem(
     val colorHex: String,
     val totalAmount: Double,
     val proportion: Float,
-    val txCount: Int
+    val txCount: Int,
+    val totalCredit: Double = 0.0,
+    val totalDebit: Double = 0.0
 )
 
 data class CategorySpendItem(
@@ -471,31 +473,42 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         selectedMonth
     ) { list, month ->
         val cal = Calendar.getInstance()
-        val bankMap = mutableMapOf<String, Double>()
+        val bankCreditMap = mutableMapOf<String, Double>()
+        val bankDebitMap = mutableMapOf<String, Double>()
         val bankCountMap = mutableMapOf<String, Int>()
 
         for (tx in list) {
             cal.timeInMillis = tx.timestamp
             if (cal.get(Calendar.YEAR) == month.year && cal.get(Calendar.MONTH) == month.month) {
                 val code = tx.bankCode
-                bankMap[code] = (bankMap[code] ?: 0.0) + tx.amount
+                if (tx.type == "CREDIT") {
+                    bankCreditMap[code] = (bankCreditMap[code] ?: 0.0) + tx.amount
+                } else {
+                    bankDebitMap[code] = (bankDebitMap[code] ?: 0.0) + tx.amount
+                }
                 bankCountMap[code] = (bankCountMap[code] ?: 0) + 1
             }
         }
 
-        val totalAll = bankMap.values.sum().coerceAtLeast(1.0)
+        val allCodes = (bankCreditMap.keys + bankDebitMap.keys)
+        val bankTotals = allCodes.associateWith { (bankCreditMap[it] ?: 0.0) + (bankDebitMap[it] ?: 0.0) }
+        val totalAll = bankTotals.values.sum().coerceAtLeast(1.0)
 
-        bankMap.entries
+        bankTotals.entries
             .filter { it.value > 0.0 }
             .sortedByDescending { it.value }
             .map { (code, amt) ->
+                val cr = bankCreditMap[code] ?: 0.0
+                val dr = bankDebitMap[code] ?: 0.0
                 BankOverviewItem(
                     bankCode = code,
                     bankName = ALL_BANK_NAMES[code] ?: code,
                     colorHex = ALL_BANK_COLORS[code] ?: "#3B82F6",
                     totalAmount = amt,
                     proportion = (amt / totalAll).toFloat().coerceIn(0.05f, 1.0f),
-                    txCount = bankCountMap[code] ?: 0
+                    txCount = bankCountMap[code] ?: 0,
+                    totalCredit = cr,
+                    totalDebit = dr
                 )
             }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -647,7 +660,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Bank-wise Comparison data for Screen 4
+    // Bank-wise Comparison data for Screen 4 (Credit, Debit, Both)
     val bankWiseComparison: StateFlow<List<BankOverviewItem>> = combine(
         visibleTransactions,
         analyticsTab,
@@ -661,43 +674,60 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         val cStart = params[3] as Long?
         val cEnd = params[4] as Long?
 
-        val bankAmounts = mutableMapOf<String, Double>()
+        val bankCreditMap = mutableMapOf<String, Double>()
+        val bankDebitMap = mutableMapOf<String, Double>()
         val bankCountMap = mutableMapOf<String, Int>()
 
         for (tx in list) {
             if (isTimestampInFilter(tx.timestamp, tf, cStart, cEnd)) {
-                val matchesTab = when (tab) {
-                    "CREDIT" -> tx.type == "CREDIT"
-                    "DEBIT" -> tx.type == "DEBIT"
-                    else -> true
+                val code = tx.bankCode
+                if (tx.type == "CREDIT") {
+                    bankCreditMap[code] = (bankCreditMap[code] ?: 0.0) + tx.amount
+                } else {
+                    bankDebitMap[code] = (bankDebitMap[code] ?: 0.0) + tx.amount
                 }
-                if (matchesTab) {
-                    val amt = if (tab == "NET") {
-                        if (tx.type == "CREDIT") tx.amount else -tx.amount
-                    } else tx.amount
-                    val code = tx.bankCode
-                    bankAmounts[code] = (bankAmounts[code] ?: 0.0) + amt
-                    bankCountMap[code] = (bankCountMap[code] ?: 0) + 1
-                }
+                bankCountMap[code] = (bankCountMap[code] ?: 0) + 1
             }
         }
 
-        val maxVal = bankAmounts.values.map { kotlin.math.abs(it) }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-
-        bankAmounts.entries
-            .filter { if (tab == "NET") it.value != 0.0 else it.value > 0.0 }
-            .sortedByDescending { it.value }
-            .map { (code, amt) ->
-                BankOverviewItem(
-                    bankCode = code,
-                    bankName = ALL_BANK_NAMES[code] ?: code,
-                    colorHex = ALL_BANK_COLORS[code] ?: "#3B82F6",
-                    totalAmount = amt,
-                    proportion = (kotlin.math.abs(amt) / maxVal).toFloat().coerceIn(0.05f, 1.0f),
-                    txCount = bankCountMap[code] ?: 0
-                )
+        val allCodes = (bankCreditMap.keys + bankDebitMap.keys)
+        val filteredEntries = allCodes.mapNotNull { code ->
+            val cr = bankCreditMap[code] ?: 0.0
+            val dr = bankDebitMap[code] ?: 0.0
+            val displayAmt = when (tab) {
+                "CREDIT" -> cr
+                "DEBIT" -> dr
+                else -> cr + dr // "BOTH"
             }
+            if (displayAmt > 0.0) {
+                Triple(code, displayAmt, cr to dr)
+            } else null
+        }.sortedByDescending { it.second }
+
+        val maxVal = filteredEntries.maxOfOrNull { it.second }?.coerceAtLeast(1.0) ?: 1.0
+
+        filteredEntries.map { (code, amt, crDr) ->
+            BankOverviewItem(
+                bankCode = code,
+                bankName = ALL_BANK_NAMES[code] ?: code,
+                colorHex = ALL_BANK_COLORS[code] ?: "#3B82F6",
+                totalAmount = amt,
+                proportion = (amt / maxVal).toFloat().coerceIn(0.05f, 1.0f),
+                txCount = bankCountMap[code] ?: 0,
+                totalCredit = crDr.first,
+                totalDebit = crDr.second
+            )
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val isVoiceAlertsEnabled: StateFlow<Boolean> = bankPrefManager.voiceAlertsEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setVoiceAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            bankPrefManager.setVoiceAlertsEnabled(enabled)
+        }
+    }
 
     // Actions
     fun updateTransaction(tx: TransactionEntity) {
