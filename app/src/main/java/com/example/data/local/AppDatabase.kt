@@ -87,7 +87,20 @@ abstract class AppDatabase : RoomDatabase() {
                         BankEntity("ICICI", "ICICI Bank", "#EA580C"),
                         BankEntity("AXIS", "Axis Bank", "#BE185D"),
                         BankEntity("KOTAK", "Kotak Mahindra Bank", "#DC2626"),
+                        BankEntity("PNB", "Punjab National Bank", "#A21CAF"),
+                        BankEntity("BOB", "Bank of Baroda", "#F97316"),
+                        BankEntity("CANARA", "Canara Bank", "#0284C7"),
+                        BankEntity("UNION", "Union Bank of India", "#1D4ED8"),
+                        BankEntity("INDIAN", "Indian Bank", "#B45309"),
+                        BankEntity("CENTRAL", "Central Bank of India", "#0F766E"),
+                        BankEntity("INDUSIND", "IndusInd Bank", "#831843"),
                         BankEntity("IDFC", "IDFC FIRST Bank", "#9333EA"),
+                        BankEntity("YES", "YES Bank", "#2563EB"),
+                        BankEntity("FEDERAL", "Federal Bank", "#F59E0B"),
+                        BankEntity("BANDHAN", "Bandhan Bank", "#0D9488"),
+                        BankEntity("PAYTM", "Paytm Payments Bank", "#0EA5E9"),
+                        BankEntity("AIRTEL", "Airtel Payments Bank", "#EF4444"),
+                        BankEntity("AUBANK", "AU Small Finance Bank", "#7C3AED"),
                         BankEntity("OTHERS", "Others", "#64748B")
                     )
                 )

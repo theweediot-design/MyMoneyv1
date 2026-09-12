@@ -27,6 +27,14 @@ class DeduplicationEngine(
             throw IllegalArgumentException("Cannot process non-transaction SMS")
         }
 
+        // 0. Stage 0: Exact duplicate SMS body already processed (prevents duplicates on inbox re-scans)
+        if (parsed.rawBody.isNotBlank()) {
+            val existingByBody = transactionDao.findByRawBody(parsed.rawBody)
+            if (existingByBody != null) {
+                return DeduplicationResult.SkippedDuplicate(existingByBody)
+            }
+        }
+
         // 1. Stage 1: Exact match via Reference Number or UTR Number from same bank
         if (parsed.refNumber.isNotBlank() || parsed.utrNumber.isNotBlank()) {
             val existingByRef = transactionDao.findByRefOrUtr(parsed.refNumber, parsed.utrNumber)

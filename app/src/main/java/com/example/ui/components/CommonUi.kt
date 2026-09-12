@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -71,7 +73,20 @@ fun BankLogoBadge(
         "ICICI" -> Color(0xFFEA580C) to "ICICI"
         "AXIS" -> Color(0xFF9D174D) to "AXIS"
         "KOTAK" -> Color(0xFFDC2626) to "KM"
+        "PNB" -> Color(0xFFA21CAF) to "PNB"
+        "BOB" -> Color(0xFFF97316) to "BOB"
+        "CANARA" -> Color(0xFF0284C7) to "CAN"
+        "UNION" -> Color(0xFF1D4ED8) to "UBI"
+        "INDIAN" -> Color(0xFFB45309) to "IB"
+        "CENTRAL" -> Color(0xFF0F766E) to "CBI"
+        "INDUSIND" -> Color(0xFF831843) to "IND"
         "IDFC" -> Color(0xFF7E22CE) to "IDFC"
+        "YES" -> Color(0xFF2563EB) to "YES"
+        "FEDERAL" -> Color(0xFFF59E0B) to "FED"
+        "BANDHAN" -> Color(0xFF0D9488) to "BDN"
+        "PAYTM" -> Color(0xFF0EA5E9) to "PYTM"
+        "AIRTEL" -> Color(0xFFEF4444) to "AIR"
+        "AUBANK" -> Color(0xFF7C3AED) to "AU"
         else -> Color(0xFF334155) to bankCode.take(2).uppercase()
     }
 
@@ -413,6 +428,8 @@ fun BankFilterChipsRow(
     selectedBanks: Set<String>,
     onToggleBank: (String) -> Unit,
     onClearFilter: () -> Unit,
+    onSelectAll: (() -> Unit)? = null,
+    onManageBanksClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (discoveredBanks.isEmpty()) return
@@ -424,7 +441,33 @@ fun BankFilterChipsRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val isAllSelected = selectedBanks.isEmpty()
+        if (onManageBanksClick != null) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(EmeraldGreen.copy(alpha = 0.12f))
+                    .border(1.dp, EmeraldGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                    .clickable { onManageBanksClick() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = "Manage Banks",
+                    tint = EmeraldGreen,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Manage",
+                    color = EmeraldGreen,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        val isAllSelected = selectedBanks.isNotEmpty() && (selectedBanks.size >= discoveredBanks.size || discoveredBanks.all { selectedBanks.contains(it) })
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(20.dp))
@@ -434,7 +477,9 @@ fun BankFilterChipsRow(
                     if (isAllSelected) EmeraldGreen else MaterialTheme.colorScheme.outline,
                     RoundedCornerShape(20.dp)
                 )
-                .clickable { onClearFilter() }
+                .clickable {
+                    if (onSelectAll != null) onSelectAll() else onClearFilter()
+                }
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -458,7 +503,7 @@ fun BankFilterChipsRow(
                         RoundedCornerShape(20.dp)
                     )
                     .clickable { onToggleBank(bankCode) }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -468,6 +513,74 @@ fun BankFilterChipsRow(
                     color = if (isSelected) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun NoBanksSelectedEmptyCard(
+    onManageBanksClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FintechCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp, horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(EmeraldGreen.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountBalance,
+                    contentDescription = null,
+                    tint = EmeraldGreen,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "No Banks Selected",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "No banks selected. Please select at least one bank in Manage Banks to view transactions.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 16.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Button(
+                onClick = onManageBanksClick,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = EmeraldGreen,
+                    contentColor = Color(0xFF042F24)
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Manage Active Banks",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
                 )
             }
         }

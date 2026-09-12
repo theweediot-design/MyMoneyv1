@@ -44,6 +44,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE (refNumber != '' AND refNumber = :refNumber) OR (utrNumber != '' AND utrNumber = :utrNumber) LIMIT 1")
     suspend fun findByRefOrUtr(refNumber: String, utrNumber: String): TransactionEntity?
 
+    @Query("SELECT * FROM transactions WHERE rawSmsBody != '' AND rawSmsBody = :rawBody LIMIT 1")
+    suspend fun findByRawBody(rawBody: String): TransactionEntity?
+
     @Query("SELECT COUNT(*) FROM transactions")
     suspend fun getCount(): Int
 

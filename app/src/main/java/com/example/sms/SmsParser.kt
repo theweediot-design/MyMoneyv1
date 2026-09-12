@@ -69,14 +69,14 @@ object SmsParser {
 
     // Debit action keywords
     private val DEBIT_KEYWORDS = listOf(
-        "debited", "debit", "spent", "paid to", "sent to", "transferred to",
-        "withdrawn", "purchase", "charged", "deducted", "dr.", " dr "
+        "debited", "debit", "spent", "paid to", "sent to", "transferred to", "transferred",
+        "withdrawn", "purchase", "charged", "deducted", "dr.", " dr ", "dr:"
     )
 
     // Credit action keywords
     private val CREDIT_KEYWORDS = listOf(
         "credited", "credit", "received", "received from", "received in", "deposited", "salary",
-        "refund", "cashback", "reversed", "cr.", " cr "
+        "refund", "cashback", "reversed", "cr.", " cr ", "cr:"
     )
 
     // Amount regex matching amounts with Rs, INR or ₹ symbols
@@ -339,32 +339,44 @@ object SmsParser {
 
     private fun identifyBank(lowerSender: String, lowerBody: String): Pair<String, String> {
         return when {
-            lowerSender.contains("sbi") || lowerSender.contains("sbin") || lowerBody.contains("state bank of india") || lowerBody.contains("sbi") ->
+            lowerSender.contains("sbi") || lowerSender.contains("sbin") || lowerSender.contains("atmsbi") || lowerBody.contains("state bank of india") || lowerBody.contains("sbi") ->
                 "SBI" to "State Bank of India"
-            lowerSender.contains("hdfc") || lowerBody.contains("hdfc") ->
+            lowerSender.contains("hdfc") || lowerSender.contains("hdfcbk") || lowerSender.contains("hdfcbn") || lowerBody.contains("hdfc") ->
                 "HDFC" to "HDFC Bank"
-            lowerSender.contains("icici") || lowerBody.contains("icici") ->
+            lowerSender.contains("icici") || lowerSender.contains("icicib") || lowerSender.contains("icicit") || lowerBody.contains("icici") ->
                 "ICICI" to "ICICI Bank"
-            lowerSender.contains("axis") || lowerSender.contains("utibr") || lowerBody.contains("axis") ->
+            lowerSender.contains("axis") || lowerSender.contains("axisbk") || lowerSender.contains("axisbn") || lowerSender.contains("utibr") || lowerBody.contains("axis") ->
                 "AXIS" to "Axis Bank"
-            lowerSender.contains("kotak") || lowerSender.contains("kmb") || lowerBody.contains("kotak") ->
+            lowerSender.contains("kotak") || lowerSender.contains("kotakb") || lowerSender.contains("kmbl") || lowerSender.contains("kmb") || lowerBody.contains("kotak") ->
                 "KOTAK" to "Kotak Mahindra Bank"
-            lowerSender.contains("idfc") || lowerSender.contains("idfcpb") || lowerBody.contains("idfc") ->
+            lowerSender.contains("pnb") || lowerSender.contains("pnbsms") || lowerSender.contains("punbn") || lowerBody.contains("punjab national") || lowerBody.contains("pnb") ->
+                "PNB" to "Punjab National Bank"
+            lowerSender.contains("bob") || lowerSender.contains("bobsms") || lowerSender.contains("barb") || lowerBody.contains("bank of baroda") || lowerBody.contains("baroda") ->
+                "BOB" to "Bank of Baroda"
+            lowerSender.contains("canara") || lowerSender.contains("canbnk") || lowerSender.contains("cnrb") || lowerBody.contains("canara") ->
+                "CANARA" to "Canara Bank"
+            lowerSender.contains("union") || lowerSender.contains("ubisms") || lowerSender.contains("unionb") || lowerSender.contains("ubin") || lowerBody.contains("union bank") ->
+                "UNION" to "Union Bank of India"
+            lowerSender.contains("indbnk") || lowerSender.contains("idib") || lowerSender.contains("indianb") || lowerBody.contains("indian bank") ->
+                "INDIAN" to "Indian Bank"
+            lowerSender.contains("cbisms") || lowerSender.contains("cbin") || lowerBody.contains("central bank") ->
+                "CENTRAL" to "Central Bank of India"
+            lowerSender.contains("indus") || lowerSender.contains("indbk") || lowerSender.contains("indb") || lowerBody.contains("indusind") ->
+                "INDUSIND" to "IndusInd Bank"
+            lowerSender.contains("idfc") || lowerSender.contains("idfcpb") || lowerSender.contains("idfcfb") || lowerBody.contains("idfc") ->
                 "IDFC" to "IDFC FIRST Bank"
-            lowerSender.contains("pnb") || lowerBody.contains("punjab national") ->
-                "OTHERS" to "Punjab National Bank"
-            lowerSender.contains("bob") || lowerBody.contains("bank of baroda") ->
-                "OTHERS" to "Bank of Baroda"
-            lowerSender.contains("canara") || lowerBody.contains("canara bank") ->
-                "OTHERS" to "Canara Bank"
-            lowerSender.contains("indus") || lowerBody.contains("indusind") ->
-                "OTHERS" to "IndusInd Bank"
-            lowerSender.contains("yes") || lowerBody.contains("yes bank") ->
-                "OTHERS" to "Yes Bank"
-            lowerSender.contains("fed") || lowerBody.contains("federal bank") ->
-                "OTHERS" to "Federal Bank"
-            lowerSender.contains("paytm") || lowerBody.contains("paytm bank") ->
-                "OTHERS" to "Paytm Payments Bank"
+            lowerSender.contains("yes") || lowerSender.contains("yesbnk") || lowerSender.contains("yesb") || lowerBody.contains("yes bank") ->
+                "YES" to "YES Bank"
+            lowerSender.contains("fed") || lowerSender.contains("fedbnk") || lowerSender.contains("fdrl") || lowerBody.contains("federal bank") ->
+                "FEDERAL" to "Federal Bank"
+            lowerSender.contains("bndhn") || lowerSender.contains("bndhan") || lowerSender.contains("bandhan") || lowerBody.contains("bandhan") ->
+                "BANDHAN" to "Bandhan Bank"
+            lowerSender.contains("paytm") || lowerSender.contains("pytm") || lowerBody.contains("paytm") ->
+                "PAYTM" to "Paytm Payments Bank"
+            lowerSender.contains("airtel") || lowerSender.contains("airtelpb") || lowerBody.contains("airtel payments") || lowerBody.contains("airtel bank") ->
+                "AIRTEL" to "Airtel Payments Bank"
+            lowerSender.contains("aufinb") || lowerSender.contains("aubank") || lowerSender.contains("aubk") || lowerBody.contains("au small finance") || lowerBody.contains("au bank") ->
+                "AUBANK" to "AU Small Finance Bank"
             else -> "OTHERS" to "Other Bank"
         }
     }

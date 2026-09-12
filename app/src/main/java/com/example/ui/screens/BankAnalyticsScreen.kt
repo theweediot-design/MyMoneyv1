@@ -42,6 +42,8 @@ import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
 import com.example.ui.components.DateRangePickerDialog
 import com.example.ui.components.FintechCard
+import com.example.ui.components.ManageBanksDialog
+import com.example.ui.components.NoBanksSelectedEmptyCard
 import com.example.ui.components.TimeFilterRow
 import com.example.ui.theme.DebitRed
 import com.example.ui.theme.EmeraldGreen
@@ -61,6 +63,19 @@ fun BankAnalyticsScreen(
     val customEndDate by viewModel.customEndDate.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
+
+    if (showManageBanksDialog) {
+        ManageBanksDialog(
+            allBanks = discoveredBanks,
+            activeBanks = selectedBanks,
+            onDismiss = { viewModel.setShowManageBanksDialog(false) },
+            onSave = {
+                viewModel.saveActiveBanks(it)
+                viewModel.setShowManageBanksDialog(false)
+            }
+        )
+    }
 
     if (showDateRangeDialog) {
         DateRangePickerDialog(
@@ -168,111 +183,121 @@ fun BankAnalyticsScreen(
                 discoveredBanks = discoveredBanks,
                 selectedBanks = selectedBanks,
                 onToggleBank = { viewModel.toggleBankFilter(it) },
-                onClearFilter = { viewModel.clearBankFilter() }
+                onClearFilter = { viewModel.clearBankFilter() },
+                onSelectAll = { viewModel.selectAllBanks() },
+                onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
             )
         }
 
-        // Bar Chart Comparing Banks
-        item {
-            FintechCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = when (analyticsTab) {
-                        "CREDIT" -> "Bank-wise Inflow (Credit)"
-                        "DEBIT" -> "Bank-wise Outflow (Debit)"
-                        else -> "Bank-wise Net Flow"
-                    },
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                BankComparisonBarChart(items = bankItems)
-            }
-        }
-
-        if (bankItems.isEmpty()) {
+        if (selectedBanks.isEmpty()) {
             item {
-                Text(
-                    text = "No bank transactions recorded for this period",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                NoBanksSelectedEmptyCard(
+                    onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
                 )
             }
         } else {
-            // Ranked List Header
+            // Bar Chart Comparing Banks
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Bank",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                FintechCard(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = when (analyticsTab) {
-                            "CREDIT" -> "Credit Amount"
-                            "DEBIT" -> "Debit Amount"
-                            else -> "Net Amount"
+                            "CREDIT" -> "Bank-wise Inflow (Credit)"
+                            "DEBIT" -> "Bank-wise Outflow (Debit)"
+                            else -> "Bank-wise Net Flow"
                         },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    BankComparisonBarChart(items = bankItems)
                 }
             }
-        }
 
-        // Bank Items List
-        items(bankItems) { item ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
-                    .clickable { onBankClick(item.bankCode) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BankLogoBadge(bankCode = item.bankCode, size = 36)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+            if (bankItems.isEmpty()) {
+                item {
+                    Text(
+                        text = "No bank transactions recorded for this period",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+            } else {
+                // Ranked List Header
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = item.bankName,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Bank",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "${item.txCount} transactions",
+                            text = when (analyticsTab) {
+                                "CREDIT" -> "Credit Amount"
+                                "DEBIT" -> "Debit Amount"
+                                else -> "Net Amount"
+                            },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
+            }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = inrFormat.format(item.totalAmount),
-                        color = if (analyticsTab == "DEBIT") DebitRed else EmeraldGreen,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Details",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
+            // Bank Items List
+            items(bankItems) { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        .clickable { onBankClick(item.bankCode) }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        BankLogoBadge(bankCode = item.bankCode, size = 36)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = item.bankName,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "${item.txCount} transactions",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = inrFormat.format(item.totalAmount),
+                            color = if (analyticsTab == "DEBIT") DebitRed else EmeraldGreen,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Details",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

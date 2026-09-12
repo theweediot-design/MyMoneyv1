@@ -48,7 +48,9 @@ import com.example.data.model.TransactionEntity
 import com.example.ui.FinanceViewModel
 import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
+import com.example.ui.components.ManageBanksDialog
 import com.example.ui.components.MonthSelectorPill
+import com.example.ui.components.NoBanksSelectedEmptyCard
 import com.example.ui.theme.DebitRed
 import com.example.ui.theme.EmeraldGreen
 import java.text.NumberFormat
@@ -69,6 +71,7 @@ fun TransactionsListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     var showSearchField by remember { mutableStateOf(false) }
     var showFilterDialog by remember { mutableStateOf(false) }
@@ -82,6 +85,18 @@ fun TransactionsListScreen(
 
     val dateFormatter = remember {
         SimpleDateFormat("d MMM, hh:mm a", Locale.getDefault())
+    }
+
+    if (showManageBanksDialog) {
+        ManageBanksDialog(
+            allBanks = discoveredBanks,
+            activeBanks = selectedBanks,
+            onDismiss = { viewModel.setShowManageBanksDialog(false) },
+            onSave = {
+                viewModel.saveActiveBanks(it)
+                viewModel.setShowManageBanksDialog(false)
+            }
+        )
     }
 
     if (showFilterDialog) {
@@ -234,123 +249,133 @@ fun TransactionsListScreen(
                 discoveredBanks = discoveredBanks,
                 selectedBanks = selectedBanks,
                 onToggleBank = { viewModel.toggleBankFilter(it) },
-                onClearFilter = { viewModel.clearBankFilter() }
+                onClearFilter = { viewModel.clearBankFilter() },
+                onSelectAll = { viewModel.selectAllBanks() },
+                onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
             )
         }
 
-        // Segmented Control: All | Credit | Debit
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
-                    .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                listOf("ALL" to "All", "CREDIT" to "Credit", "DEBIT" to "Debit").forEach { (key, label) ->
-                    val isSelected = typeFilter == key
+        if (selectedBanks.isEmpty()) {
+            item {
+                NoBanksSelectedEmptyCard(
+                    onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
+                )
+            }
+        } else {
+            // Segmented Control: All | Credit | Debit
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf("ALL" to "All", "CREDIT" to "Credit", "DEBIT" to "Debit").forEach { (key, label) ->
+                        val isSelected = typeFilter == key
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) EmeraldGreen else Color.Transparent)
+                                .clickable { viewModel.setTypeFilter(key) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Count indicator
+            item {
+                Text(
+                    text = "Showing ${transactions.size} transactions",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+
+            // Empty state
+            if (transactions.isEmpty()) {
+                item {
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) EmeraldGreen else Color.Transparent)
-                            .clickable { viewModel.setTypeFilter(key) }
-                            .padding(vertical = 8.dp),
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = label,
-                            color = if (isSelected) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            text = "No transactions found for the selected filters",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 14.sp
                         )
                     }
                 }
             }
-        }
 
-        // Count indicator
-        item {
-            Text(
-                text = "Showing ${transactions.size} transactions",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-        }
+            // Transaction items
+            items(transactions, key = { it.id }) { tx ->
+                val isCredit = tx.type == "CREDIT"
+                val sign = if (isCredit) "+" else "-"
+                val amountColor = if (isCredit) EmeraldGreen else DebitRed
 
-        // Empty state
-        if (transactions.isEmpty()) {
-            item {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 40.dp),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                        .clickable { onTransactionClick(tx) }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "No transactions found for the selected filters",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
-                    )
-                }
-            }
-        }
+                    BankLogoBadge(bankCode = tx.bankCode, size = 38)
 
-        // Transaction items
-        items(transactions, key = { it.id }) { tx ->
-            val isCredit = tx.type == "CREDIT"
-            val sign = if (isCredit) "+" else "-"
-            val amountColor = if (isCredit) EmeraldGreen else DebitRed
+                    Spacer(modifier = Modifier.width(12.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                    .clickable { onTransactionClick(tx) }
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BankLogoBadge(bankCode = tx.bankCode, size = 38)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = tx.merchant.ifBlank { tx.categoryName },
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "${tx.accountName} • ${tx.paymentMethod}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = tx.merchant.ifBlank { tx.categoryName },
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "${tx.accountName} • ${tx.paymentMethod}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        maxLines = 1
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "$sign${inrFormat.format(tx.amount)}",
-                        color = amountColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = dateFormatter.format(Date(tx.timestamp)),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 10.sp
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "$sign${inrFormat.format(tx.amount)}",
+                            color = amountColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = dateFormatter.format(Date(tx.timestamp)),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        )
+                    }
                 }
             }
         }

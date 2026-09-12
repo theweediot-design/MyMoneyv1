@@ -8,6 +8,7 @@ import com.example.data.model.AccountEntity
 import com.example.data.model.BankEntity
 import com.example.data.model.CategoryEntity
 import com.example.data.model.TransactionEntity
+import com.example.data.preferences.BankPreferenceManager
 import com.example.data.repository.FinanceRepository
 import com.example.sms.LiveChecklistState
 import com.example.sms.ScanProgress
@@ -71,6 +72,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val repository = FinanceRepository(db)
     private val smsScanner = SmsScanner(application)
     private val smsManager = SmsDetectionManager.getInstance(application)
+    private val bankPrefManager = BankPreferenceManager(application)
 
     val allTransactions: StateFlow<List<TransactionEntity>> = repository.allTransactions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -84,40 +86,68 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     val allCategories: StateFlow<List<CategoryEntity>> = repository.allCategories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Discovered banks from transactions and registered banks
+    // Discovered banks from transactions, registered banks, and standard Indian banks
     val discoveredBanks: StateFlow<List<String>> = combine(allTransactions, allBanks) { txList, bankList ->
         val fromTx = txList.map { it.bankCode }.filter { it.isNotBlank() }
         val fromBanks = bankList.map { it.code }.filter { it.isNotBlank() }
         val combined = (fromTx + fromBanks).distinct().sorted()
-        if (combined.isNotEmpty()) combined else listOf("SBI", "HDFC", "ICICI", "AXIS", "KOTAK", "IDFC")
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        if (combined.isNotEmpty()) combined else ALL_KNOWN_BANKS
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ALL_KNOWN_BANKS)
 
-    // Bank visibility selection: empty set means ALL banks visible
-    private val _selectedBanksFilter = MutableStateFlow<Set<String>>(emptySet())
-    val selectedBanksFilter: StateFlow<Set<String>> = _selectedBanksFilter.asStateFlow()
+    // Persistent bank visibility selection backed by DataStore Preferences
+    val selectedBanksFilter: StateFlow<Set<String>> = combine(
+        bankPrefManager.activeBanksFlow,
+        discoveredBanks
+    ) { storedBanks, discovered ->
+        if (storedBanks == null) {
+            // Initial default: all discovered banks are active
+            discovered.toSet()
+        } else {
+            // User explicitly configured active banks
+            storedBanks
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ALL_KNOWN_BANKS.toSet())
+
+    private val _showManageBanksDialog = MutableStateFlow(false)
+    val showManageBanksDialog: StateFlow<Boolean> = _showManageBanksDialog.asStateFlow()
+
+    fun setShowManageBanksDialog(show: Boolean) {
+        _showManageBanksDialog.value = show
+    }
+
+    fun saveActiveBanks(banks: Set<String>) {
+        viewModelScope.launch {
+            bankPrefManager.saveActiveBanks(banks)
+        }
+    }
 
     fun toggleBankFilter(bankCode: String) {
-        val current = _selectedBanksFilter.value.toMutableSet()
-        if (current.contains(bankCode)) {
-            current.remove(bankCode)
-        } else {
-            current.add(bankCode)
+        viewModelScope.launch {
+            val current = selectedBanksFilter.value
+            bankPrefManager.toggleBank(bankCode, current)
         }
-        _selectedBanksFilter.value = current
     }
 
     fun clearBankFilter() {
-        _selectedBanksFilter.value = emptySet()
+        viewModelScope.launch {
+            bankPrefManager.clearAll()
+        }
+    }
+
+    fun selectAllBanks() {
+        viewModelScope.launch {
+            bankPrefManager.selectAll(discoveredBanks.value)
+        }
     }
 
     // Visible transactions filtered by bank visibility preference
     // Does NOT delete transactions from Room DB; only filters in UI data streams
     val visibleTransactions: StateFlow<List<TransactionEntity>> = combine(
         allTransactions,
-        _selectedBanksFilter
+        selectedBanksFilter
     ) { list, selectedBanks ->
         if (selectedBanks.isEmpty()) {
-            list
+            emptyList()
         } else {
             list.filter { selectedBanks.contains(it.bankCode) }
         }
@@ -270,7 +300,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         _selectedAccountFilter.value = "All Accounts"
         _minAmountFilter.value = null
         _maxAmountFilter.value = null
-        _selectedBanksFilter.value = emptySet()
+        selectAllBanks()
     }
 
     // Filtered transactions for Transactions List screen
@@ -396,34 +426,14 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
         val totalAll = bankMap.values.sum().coerceAtLeast(1.0)
 
-        val bankColors = mapOf(
-            "SBI" to "#2563EB",
-            "HDFC" to "#0284C7",
-            "ICICI" to "#EA580C",
-            "AXIS" to "#BE185D",
-            "KOTAK" to "#DC2626",
-            "IDFC" to "#9333EA",
-            "OTHERS" to "#64748B"
-        )
-
-        val bankDisplayNames = mapOf(
-            "SBI" to "SBI",
-            "HDFC" to "HDFC Bank",
-            "ICICI" to "ICICI Bank",
-            "AXIS" to "Axis Bank",
-            "KOTAK" to "Kotak Mahindra",
-            "IDFC" to "IDFC First Bank",
-            "OTHERS" to "Others"
-        )
-
         bankMap.entries
             .filter { it.value > 0.0 }
             .sortedByDescending { it.value }
             .map { (code, amt) ->
                 BankOverviewItem(
                     bankCode = code,
-                    bankName = bankDisplayNames[code] ?: code,
-                    colorHex = bankColors[code] ?: "#3B82F6",
+                    bankName = ALL_BANK_NAMES[code] ?: code,
+                    colorHex = ALL_BANK_COLORS[code] ?: "#3B82F6",
                     totalAmount = amt,
                     proportion = (amt / totalAll).toFloat().coerceIn(0.05f, 1.0f),
                     txCount = bankCountMap[code] ?: 0
@@ -613,25 +623,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             }
         }
 
-        val bankDisplayNames = mapOf(
-            "SBI" to "SBI",
-            "HDFC" to "HDFC Bank",
-            "ICICI" to "ICICI Bank",
-            "AXIS" to "Axis Bank",
-            "KOTAK" to "Kotak Mahindra",
-            "IDFC" to "IDFC First Bank",
-            "OTHERS" to "Others"
-        )
-        val bankColors = mapOf(
-            "SBI" to "#2563EB",
-            "HDFC" to "#0284C7",
-            "ICICI" to "#EA580C",
-            "AXIS" to "#BE185D",
-            "KOTAK" to "#DC2626",
-            "IDFC" to "#9333EA",
-            "OTHERS" to "#64748B"
-        )
-
         val maxVal = bankAmounts.values.map { kotlin.math.abs(it) }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
 
         bankAmounts.entries
@@ -640,8 +631,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             .map { (code, amt) ->
                 BankOverviewItem(
                     bankCode = code,
-                    bankName = bankDisplayNames[code] ?: code,
-                    colorHex = bankColors[code] ?: "#3B82F6",
+                    bankName = ALL_BANK_NAMES[code] ?: code,
+                    colorHex = ALL_BANK_COLORS[code] ?: "#3B82F6",
                     totalAmount = amt,
                     proportion = (kotlin.math.abs(amt) / maxVal).toFloat().coerceIn(0.05f, 1.0f),
                     txCount = bankCountMap[code] ?: 0
@@ -673,5 +664,59 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.exportTransactionsToCsv(context, allTransactions.value)
         }
+    }
+
+    companion object {
+        val ALL_KNOWN_BANKS = listOf(
+            "SBI", "HDFC", "ICICI", "AXIS", "KOTAK", "PNB", "BOB", "CANARA",
+            "UNION", "INDIAN", "CENTRAL", "INDUSIND", "IDFC", "YES", "FEDERAL",
+            "BANDHAN", "PAYTM", "AIRTEL", "AUBANK", "OTHERS"
+        )
+
+        val ALL_BANK_COLORS = mapOf(
+            "SBI" to "#2563EB",
+            "HDFC" to "#0284C7",
+            "ICICI" to "#EA580C",
+            "AXIS" to "#BE185D",
+            "KOTAK" to "#DC2626",
+            "PNB" to "#A21CAF",
+            "BOB" to "#F97316",
+            "CANARA" to "#0284C7",
+            "UNION" to "#1D4ED8",
+            "INDIAN" to "#B45309",
+            "CENTRAL" to "#0F766E",
+            "INDUSIND" to "#831843",
+            "IDFC" to "#9333EA",
+            "YES" to "#2563EB",
+            "FEDERAL" to "#F59E0B",
+            "BANDHAN" to "#0D9488",
+            "PAYTM" to "#0EA5E9",
+            "AIRTEL" to "#EF4444",
+            "AUBANK" to "#7C3AED",
+            "OTHERS" to "#64748B"
+        )
+
+        val ALL_BANK_NAMES = mapOf(
+            "SBI" to "State Bank of India",
+            "HDFC" to "HDFC Bank",
+            "ICICI" to "ICICI Bank",
+            "AXIS" to "Axis Bank",
+            "KOTAK" to "Kotak Mahindra Bank",
+            "PNB" to "Punjab National Bank",
+            "BOB" to "Bank of Baroda",
+            "CANARA" to "Canara Bank",
+            "UNION" to "Union Bank of India",
+            "INDIAN" to "Indian Bank",
+            "CENTRAL" to "Central Bank of India",
+            "INDUSIND" to "IndusInd Bank",
+            "IDFC" to "IDFC FIRST Bank",
+            "YES" to "YES Bank",
+            "FEDERAL" to "Federal Bank",
+            "BANDHAN" to "Bandhan Bank",
+            "PAYTM" to "Paytm Payments Bank",
+            "AIRTEL" to "Airtel Payments Bank",
+            "AUBANK" to "AU Small Finance Bank",
+            "OTHERS" to "Other Bank"
+        )
     }
 }

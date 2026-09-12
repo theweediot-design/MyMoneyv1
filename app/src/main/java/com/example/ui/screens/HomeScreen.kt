@@ -49,8 +49,10 @@ import com.example.ui.FinanceViewModel
 import com.example.ui.components.BankFilterChipsRow
 import com.example.ui.components.BankLogoBadge
 import com.example.ui.components.FintechCard
+import com.example.ui.components.ManageBanksDialog
 import com.example.ui.components.MetricSummaryCard
 import com.example.ui.components.MonthSelectorPill
+import com.example.ui.components.NoBanksSelectedEmptyCard
 import com.example.ui.theme.AccentBlue
 import com.example.ui.theme.AccentPurple
 import com.example.ui.theme.DebitRed
@@ -69,8 +71,21 @@ fun HomeScreen(
     val availableMonths by viewModel.availableMonths.collectAsState()
     val discoveredBanks by viewModel.discoveredBanks.collectAsState()
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
+    val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
 
     var showMonthMenu by remember { mutableStateOf(false) }
+
+    if (showManageBanksDialog) {
+        ManageBanksDialog(
+            allBanks = discoveredBanks,
+            activeBanks = selectedBanks,
+            onDismiss = { viewModel.setShowManageBanksDialog(false) },
+            onSave = {
+                viewModel.saveActiveBanks(it)
+                viewModel.setShowManageBanksDialog(false)
+            }
+        )
+    }
 
     val inrFormat = remember {
         NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
@@ -196,63 +211,73 @@ fun HomeScreen(
                 discoveredBanks = discoveredBanks,
                 selectedBanks = selectedBanks,
                 onToggleBank = { viewModel.toggleBankFilter(it) },
-                onClearFilter = { viewModel.clearBankFilter() }
+                onClearFilter = { viewModel.clearBankFilter() },
+                onSelectAll = { viewModel.selectAllBanks() },
+                onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
             )
         }
 
-        // 4 Summary Metrics (2x2 Grid)
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricSummaryCard(
-                        title = "Total Credit",
-                        amount = inrFormat.format(summary.totalCredit),
-                        badgeText = summary.creditChangePct,
-                        isPositiveBadge = !summary.creditChangePct.startsWith("-"),
-                        icon = Icons.Default.ArrowDownward,
-                        iconColor = EmeraldGreen,
-                        iconBgColor = EmeraldGreen.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
+        if (selectedBanks.isEmpty()) {
+            item {
+                NoBanksSelectedEmptyCard(
+                    onManageBanksClick = { viewModel.setShowManageBanksDialog(true) }
+                )
+            }
+        } else {
+            // 4 Summary Metrics (2x2 Grid)
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        MetricSummaryCard(
+                            title = "Total Credit",
+                            amount = inrFormat.format(summary.totalCredit),
+                            badgeText = summary.creditChangePct,
+                            isPositiveBadge = !summary.creditChangePct.startsWith("-"),
+                            icon = Icons.Default.ArrowDownward,
+                            iconColor = EmeraldGreen,
+                            iconBgColor = EmeraldGreen.copy(alpha = 0.15f),
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    MetricSummaryCard(
-                        title = "Total Debit",
-                        amount = inrFormat.format(summary.totalDebit),
-                        badgeText = summary.debitChangePct,
-                        isPositiveBadge = summary.debitChangePct.startsWith("-"),
-                        icon = Icons.Default.ArrowUpward,
-                        iconColor = DebitRed,
-                        iconBgColor = DebitRed.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                        MetricSummaryCard(
+                            title = "Total Debit",
+                            amount = inrFormat.format(summary.totalDebit),
+                            badgeText = summary.debitChangePct,
+                            isPositiveBadge = summary.debitChangePct.startsWith("-"),
+                            icon = Icons.Default.ArrowUpward,
+                            iconColor = DebitRed,
+                            iconBgColor = DebitRed.copy(alpha = 0.15f),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    MetricSummaryCard(
-                        title = "Net Flow",
-                        amount = inrFormat.format(summary.netFlow),
-                        badgeText = null,
-                        icon = Icons.Default.AccountBalanceWallet,
-                        iconColor = AccentBlue,
-                        iconBgColor = AccentBlue.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        MetricSummaryCard(
+                            title = "Net Flow",
+                            amount = inrFormat.format(summary.netFlow),
+                            badgeText = null,
+                            icon = Icons.Default.AccountBalanceWallet,
+                            iconColor = AccentBlue,
+                            iconBgColor = AccentBlue.copy(alpha = 0.15f),
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    MetricSummaryCard(
-                        title = "Transactions",
-                        amount = summary.transactionCount.toString(),
-                        badgeText = null,
-                        icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                        iconColor = AccentPurple,
-                        iconBgColor = AccentPurple.copy(alpha = 0.15f),
-                        modifier = Modifier.weight(1f)
-                    )
+                        MetricSummaryCard(
+                            title = "Transactions",
+                            amount = summary.transactionCount.toString(),
+                            badgeText = null,
+                            icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                            iconColor = AccentPurple,
+                            iconBgColor = AccentPurple.copy(alpha = 0.15f),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
@@ -304,94 +329,96 @@ fun HomeScreen(
             }
         }
 
-        // Bank-wise Overview Section
-        item {
-            FintechCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Bank-wise Overview",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "See All",
-                        color = AccentBlue,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { onNavigate("ACCOUNTS") }
-                    )
-                }
+        // Bank-wise Overview Section (only when banks are selected)
+        if (selectedBanks.isNotEmpty()) {
+            item {
+                FintechCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Bank-wise Overview",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "See All",
+                            color = AccentBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { onNavigate("ACCOUNTS") }
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                if (bankOverview.isEmpty()) {
-                    Text(
-                        text = "No bank transactions recorded for this month.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        bankOverview.forEach { item ->
-                            val barColor = try {
-                                Color(android.graphics.Color.parseColor(item.colorHex))
-                            } catch (_: Exception) {
-                                EmeraldGreen
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        viewModel.setTrendsBank(item.bankCode)
-                                        onNavigate("ACCOUNTS")
-                                    },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                BankLogoBadge(bankCode = item.bankCode, size = 32)
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                Text(
-                                    text = item.bankName,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.width(90.dp)
-                                )
-
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                // Colored pill progress bar
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(item.proportion)
-                                            .height(6.dp)
-                                            .clip(RoundedCornerShape(3.dp))
-                                            .background(barColor)
-                                    )
+                    if (bankOverview.isEmpty()) {
+                        Text(
+                            text = "No bank transactions recorded for this month.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            bankOverview.forEach { item ->
+                                val barColor = try {
+                                    Color(android.graphics.Color.parseColor(item.colorHex))
+                                } catch (_: Exception) {
+                                    EmeraldGreen
                                 }
 
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.setTrendsBank(item.bankCode)
+                                            onNavigate("ACCOUNTS")
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    BankLogoBadge(bankCode = item.bankCode, size = 32)
+                                    Spacer(modifier = Modifier.width(10.dp))
 
-                                Text(
-                                    text = inrFormat.format(item.totalAmount),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                    Text(
+                                        text = item.bankName,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.width(90.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    // Colored pill progress bar
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(item.proportion)
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(barColor)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Text(
+                                        text = inrFormat.format(item.totalAmount),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
                     }
