@@ -41,12 +41,23 @@ import com.example.ui.theme.EmeraldGreen
 fun PinLockScreen(
     securityManager: SecurityManager,
     isSettingPin: Boolean = false,
+    onRequestBiometric: (() -> Unit)? = null,
+    externalErrorMessage: String? = null,
     onSuccess: () -> Unit
 ) {
     var enteredPin by remember { mutableStateOf("") }
     var confirmPinStage by remember { mutableStateOf(false) }
     var firstEnteredPin by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var localErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    val errorMessage = externalErrorMessage ?: localErrorMessage
+
+    // Auto-prompt biometric on display if setting PIN is false and biometric is enabled
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (!isSettingPin && securityManager.isBiometricEnabled && onRequestBiometric != null) {
+            onRequestBiometric()
+        }
+    }
 
     val pinLength = 6
 
@@ -54,7 +65,7 @@ fun PinLockScreen(
         if (enteredPin.length < pinLength) {
             val newPin = enteredPin + digit
             enteredPin = newPin
-            errorMessage = null
+            localErrorMessage = null
 
             if (newPin.length == pinLength) {
                 if (isSettingPin) {
@@ -67,7 +78,7 @@ fun PinLockScreen(
                             securityManager.pin = newPin
                             onSuccess()
                         } else {
-                            errorMessage = "PINs do not match. Try again."
+                            localErrorMessage = "PINs do not match. Try again."
                             confirmPinStage = false
                             enteredPin = ""
                             firstEnteredPin = ""
@@ -77,7 +88,7 @@ fun PinLockScreen(
                     if (securityManager.verifyPin(newPin)) {
                         onSuccess()
                     } else {
-                        errorMessage = "Incorrect PIN. Try again."
+                        localErrorMessage = "Incorrect PIN. Try again."
                         enteredPin = ""
                     }
                 }
@@ -88,7 +99,7 @@ fun PinLockScreen(
     fun onBackspace() {
         if (enteredPin.isNotEmpty()) {
             enteredPin = enteredPin.dropLast(1)
-            errorMessage = null
+            localErrorMessage = null
         }
     }
 
@@ -206,7 +217,7 @@ fun PinLockScreen(
                                         "DEL" -> onBackspace()
                                         "BIO" -> {
                                             if (securityManager.isBiometricEnabled) {
-                                                onSuccess()
+                                                onRequestBiometric?.invoke()
                                             }
                                         }
                                         else -> onKeyClick(key)

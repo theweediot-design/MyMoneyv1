@@ -53,6 +53,7 @@ import com.example.ui.theme.DebitRed
 import com.example.ui.theme.EmeraldGreen
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -65,7 +66,6 @@ fun AccountDetailScreen(
 ) {
     val account = viewModel.selectedAccount.collectAsState().value
     val allTransactions by viewModel.allTransactions.collectAsState()
-    val monthlyTrends by viewModel.monthlyTrendsData.collectAsState()
     val timeFilter by viewModel.timeFilter.collectAsState()
     val showDateRangeDialog by viewModel.showDateRangeDialog.collectAsState()
     val customStartDate by viewModel.customStartDate.collectAsState()
@@ -90,9 +90,60 @@ fun AccountDetailScreen(
         SimpleDateFormat("d MMM, hh:mm a", Locale.getDefault())
     }
 
-    val accountTransactions = remember(account, allTransactions) {
+    val accountTransactions = remember(account, allTransactions, timeFilter, customStartDate, customEndDate) {
         if (account == null) emptyList()
-        else allTransactions.filter { it.accountId == account.id || it.accountNumberLast4 == account.accountNumberLast4 }
+        else allTransactions.filter { tx ->
+            val matchesAccount = tx.accountId == account.id ||
+                    (account.accountNumberLast4.isNotBlank() && tx.accountNumberLast4 == account.accountNumberLast4) ||
+                    (account.bankCode.equals(tx.bankCode, ignoreCase = true) && account.accountName.equals(tx.accountName, ignoreCase = true))
+            matchesAccount && viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)
+        }
+    }
+
+    val accountMonthlyFlow = remember(account, allTransactions, timeFilter, customStartDate, customEndDate) {
+        if (account == null) emptyList()
+        else {
+            val monthsCount = when (timeFilter) {
+                "1M" -> 1
+                "3M" -> 3
+                "6M" -> 6
+                "1Y" -> 12
+                "Custom" -> {
+                    val cStart = customStartDate
+                    val cEnd = customEndDate
+                    if (cStart != null && cEnd != null) {
+                        val startCal = Calendar.getInstance().apply { timeInMillis = cStart }
+                        val endCal = Calendar.getInstance().apply { timeInMillis = cEnd }
+                        val diff = (endCal.get(Calendar.YEAR) - startCal.get(Calendar.YEAR)) * 12 +
+                                (endCal.get(Calendar.MONTH) - startCal.get(Calendar.MONTH)) + 1
+                        diff.coerceIn(1, 24)
+                    } else 6
+                }
+                else -> 6
+            }
+            val cal = Calendar.getInstance()
+            val sdfShort = SimpleDateFormat("MMM", Locale.getDefault())
+            val months = (monthsCount - 1 downTo 0).map { offset ->
+                val c = Calendar.getInstance().apply { add(Calendar.MONTH, -offset) }
+                Triple(c.get(Calendar.YEAR), c.get(Calendar.MONTH), sdfShort.format(c.time))
+            }
+            months.map { (yr, mo, label) ->
+                var credit = 0.0
+                var debit = 0.0
+                for (tx in allTransactions) {
+                    val matchesAccount = tx.accountId == account.id ||
+                            (account.accountNumberLast4.isNotBlank() && tx.accountNumberLast4 == account.accountNumberLast4) ||
+                            (account.bankCode.equals(tx.bankCode, ignoreCase = true) && account.accountName.equals(tx.accountName, ignoreCase = true))
+                    if (matchesAccount && viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)) {
+                        cal.timeInMillis = tx.timestamp
+                        if (cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
+                            if (tx.type == "CREDIT") credit += tx.amount else debit += tx.amount
+                        }
+                    }
+                }
+                com.example.ui.MonthlyBarData(label, credit, debit)
+            }
+        }
     }
 
     val totalCredit = remember(accountTransactions) {
@@ -245,7 +296,7 @@ fun AccountDetailScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(14.dp))
-                MonthlyDualBarChart(data = monthlyTrends)
+                MonthlyDualBarChart(data = accountMonthlyFlow)
             }
         }
 

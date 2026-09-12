@@ -53,39 +53,44 @@ class SmsScanner(private val context: Context) {
         var added = 0
         var merged = 0
 
-        val addressIdx = cursor.getColumnIndex(Telephony.Sms.ADDRESS)
-        val bodyIdx = cursor.getColumnIndex(Telephony.Sms.BODY)
-        val dateIdx = cursor.getColumnIndex(Telephony.Sms.DATE)
+        cursor.use { c ->
+            val addressIdx = c.getColumnIndex(Telephony.Sms.ADDRESS)
+            val bodyIdx = c.getColumnIndex(Telephony.Sms.BODY)
+            val dateIdx = c.getColumnIndex(Telephony.Sms.DATE)
 
-        while (cursor.moveToNext()) {
-            val address = if (addressIdx >= 0) cursor.getString(addressIdx) ?: "" else ""
-            val body = if (bodyIdx >= 0) cursor.getString(bodyIdx) ?: "" else ""
-            val date = if (dateIdx >= 0) cursor.getLong(dateIdx) else System.currentTimeMillis()
+            while (c.moveToNext()) {
+                val address = if (addressIdx >= 0) c.getString(addressIdx) ?: "" else ""
+                val body = if (bodyIdx >= 0) c.getString(bodyIdx) ?: "" else ""
+                val date = if (dateIdx >= 0) c.getLong(dateIdx) else System.currentTimeMillis()
 
-            if (body.isNotBlank()) {
-                val parsed = SmsParser.parse(body, address, date)
-                if (parsed.isValidTransaction) {
-                    when (dedupEngine.process(parsed)) {
-                        is DeduplicationResult.Created -> added++
-                        is DeduplicationResult.Merged -> merged++
-                        is DeduplicationResult.SkippedDuplicate -> merged++
+                if (body.isNotBlank()) {
+                    val parsed = SmsParser.parse(body, address, date)
+                    if (parsed.isValidTransaction) {
+                        try {
+                            when (dedupEngine.process(parsed)) {
+                                is DeduplicationResult.Created -> added++
+                                is DeduplicationResult.Merged -> merged++
+                                is DeduplicationResult.SkippedDuplicate -> merged++
+                            }
+                        } catch (e: Exception) {
+                            // Non-transaction or unparseable item skipped
+                        }
                     }
                 }
-            }
 
-            processed++
-            if (processed % 50 == 0 || processed == totalFound) {
-                _scanProgress.value = ScanProgress(
-                    isScanning = true,
-                    current = processed,
-                    total = totalFound,
-                    addedTransactions = added,
-                    mergedDuplicates = merged
-                )
-                onBatchComplete?.invoke(processed, totalFound)
+                processed++
+                if (processed % 50 == 0 || processed == totalFound) {
+                    _scanProgress.value = ScanProgress(
+                        isScanning = true,
+                        current = processed,
+                        total = totalFound,
+                        addedTransactions = added,
+                        mergedDuplicates = merged
+                    )
+                    onBatchComplete?.invoke(processed, totalFound)
+                }
             }
         }
-        cursor.close()
 
         val finalResult = ScanProgress(
             isScanning = false,

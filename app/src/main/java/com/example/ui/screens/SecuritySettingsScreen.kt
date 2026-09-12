@@ -52,7 +52,8 @@ import com.example.ui.theme.EmeraldGreen
 fun SecuritySettingsScreen(
     securityManager: SecurityManager,
     onNavigateBack: () -> Unit,
-    onChangePinRequested: () -> Unit
+    onChangePinRequested: () -> Unit,
+    onToggleHideAmounts: (Boolean) -> Unit = {}
 ) {
     var isBiometricEnabled by remember { mutableStateOf(securityManager.isBiometricEnabled) }
     var autoLockTimer by remember { mutableStateOf(securityManager.autoLockTimer) }
@@ -274,6 +275,7 @@ fun SecuritySettingsScreen(
                         onCheckedChange = {
                             hideAmounts = it
                             securityManager.isHideAmountsInRecentApps = it
+                            onToggleHideAmounts(it)
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFF042F24),

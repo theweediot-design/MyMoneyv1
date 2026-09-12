@@ -80,11 +80,30 @@ fun BankTrendsScreen(
 
     val bankOptions = listOf("All Banks", "SBI", "HDFC", "ICICI", "AXIS", "KOTAK", "IDFC", "OTHERS")
 
-    val individualData = remember(individualBank, allTransactions) {
+    val individualData = remember(individualBank, allTransactions, timeFilter, customStartDate, customEndDate) {
+        val monthsCount = when (timeFilter) {
+            "1M" -> 1
+            "3M" -> 3
+            "6M" -> 6
+            "1Y" -> 12
+            "Custom" -> {
+                val cStart = customStartDate
+                val cEnd = customEndDate
+                if (cStart != null && cEnd != null) {
+                    val startCal = Calendar.getInstance().apply { timeInMillis = cStart }
+                    val endCal = Calendar.getInstance().apply { timeInMillis = cEnd }
+                    val diff = (endCal.get(Calendar.YEAR) - startCal.get(Calendar.YEAR)) * 12 +
+                            (endCal.get(Calendar.MONTH) - startCal.get(Calendar.MONTH)) + 1
+                    diff.coerceIn(1, 24)
+                } else 6
+            }
+            else -> 6
+        }
+
         val cal = Calendar.getInstance()
         val sdfShort = SimpleDateFormat("MMM", Locale.getDefault())
 
-        val months = (5 downTo 0).map { offset ->
+        val months = (monthsCount - 1 downTo 0).map { offset ->
             val c = Calendar.getInstance().apply { add(Calendar.MONTH, -offset) }
             Triple(c.get(Calendar.YEAR), c.get(Calendar.MONTH), sdfShort.format(c.time))
         }
@@ -94,10 +113,12 @@ fun BankTrendsScreen(
             var debit = 0.0
 
             for (tx in allTransactions) {
-                cal.timeInMillis = tx.timestamp
-                val matchBank = tx.bankCode.equals(individualBank, true) || tx.bankName.contains(individualBank, true)
-                if (matchBank && cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
-                    if (tx.type == "CREDIT") credit += tx.amount else debit += tx.amount
+                if (viewModel.isTimestampInFilter(tx.timestamp, timeFilter, customStartDate, customEndDate)) {
+                    cal.timeInMillis = tx.timestamp
+                    val matchBank = tx.bankCode.equals(individualBank, true) || tx.bankName.contains(individualBank, true)
+                    if (matchBank && cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
+                        if (tx.type == "CREDIT") credit += tx.amount else debit += tx.amount
+                    }
                 }
             }
 

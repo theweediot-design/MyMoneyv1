@@ -59,6 +59,20 @@ abstract class AppDatabase : RoomDatabase() {
                     }
                 }
             }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                INSTANCE?.let { database ->
+                    scope.launch {
+                        try {
+                            database.accountDao().deleteFakeAccounts()
+                            database.transactionDao().cleanFakeAccountTransactions()
+                        } catch (e: Exception) {
+                            // Ignored if tables are being set up
+                        }
+                    }
+                }
+            }
         }
 
         suspend fun populateInitialData(database: AppDatabase) {

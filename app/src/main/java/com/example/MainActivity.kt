@@ -1,15 +1,15 @@
 package com.example
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.security.BiometricAvailability
 import com.example.security.SecurityManager
 import com.example.ui.FinanceViewModel
 import com.example.ui.components.AppBottomNav
@@ -45,10 +47,12 @@ import com.example.ui.screens.TransactionsListScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.ThemeManager
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private lateinit var securityManager: SecurityManager
     private lateinit var themeManager: ThemeManager
+    private var backgroundTimestamp: Long = 0L
+    private val isUnlockedState = mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,23 +61,100 @@ class MainActivity : ComponentActivity() {
         securityManager = SecurityManager(this)
         themeManager = ThemeManager(this)
 
-        if (securityManager.isHideAmountsInRecentApps) {
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE
-            )
-        }
+        isUnlockedState.value = !securityManager.isPinSet
+        updateFlagSecure(securityManager.isHideAmountsInRecentApps)
 
         setContent {
             val currentTheme by themeManager.currentTheme.collectAsState()
+            val isUnlocked by isUnlockedState
 
             MyApplicationTheme(themeMode = currentTheme) {
                 MainAppContent(
                     securityManager = securityManager,
-                    themeManager = themeManager
+                    themeManager = themeManager,
+                    isUnlocked = isUnlocked,
+                    onUnlockChange = { isUnlockedState.value = it },
+                    onRequestBiometric = { onSuccess, onError ->
+                        promptBiometrics(onSuccess, onError)
+                    },
+                    onToggleHideAmounts = { updateFlagSecure(it) }
                 )
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        backgroundTimestamp = System.currentTimeMillis()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (backgroundTimestamp > 0L && securityManager.isPinSet) {
+            val elapsed = System.currentTimeMillis() - backgroundTimestamp
+            val timeout = securityManager.getAutoLockTimeoutMillis()
+            if (elapsed >= timeout) {
+                isUnlockedState.value = false
+            }
+        }
+        backgroundTimestamp = 0L
+    }
+
+    fun updateFlagSecure(hide: Boolean) {
+        if (hide) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    private fun promptBiometrics(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val availability = securityManager.checkBiometricAvailability()
+        if (availability != BiometricAvailability.AVAILABLE) {
+            val msg = when (availability) {
+                BiometricAvailability.NONE_ENROLLED -> "No fingerprint or face enrolled on device"
+                BiometricAvailability.NO_HARDWARE -> "Biometric hardware is not available"
+                BiometricAvailability.HW_UNAVAILABLE -> "Biometric sensor is currently unavailable"
+                else -> "Biometric authentication is not supported"
+            }
+            onError(msg)
+            return
+        }
+
+        val executor = ContextCompat.getMainExecutor(this)
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock MyMoney")
+            .setSubtitle("Use your fingerprint to access your finances")
+            .setNegativeButtonText("Use PIN")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .build()
+
+        val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                    onError(errString.toString())
+                }
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                onError("Fingerprint not recognized. Try again or enter PIN.")
+            }
+        })
+
+        biometricPrompt.authenticate(promptInfo)
     }
 }
 
@@ -81,12 +162,16 @@ class MainActivity : ComponentActivity() {
 fun MainAppContent(
     securityManager: SecurityManager,
     themeManager: ThemeManager,
+    isUnlocked: Boolean,
+    onUnlockChange: (Boolean) -> Unit,
+    onRequestBiometric: (onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit,
+    onToggleHideAmounts: (Boolean) -> Unit,
     viewModel: FinanceViewModel = viewModel()
 ) {
-    var isUnlocked by remember { mutableStateOf(!securityManager.isPinSet) }
     var isChangingPin by remember { mutableStateOf(false) }
     var currentScreen by remember { mutableStateOf("HOME") }
     var navigationStack by remember { mutableStateOf(listOf("HOME")) }
+    var bioErrorMessage by remember { mutableStateOf<String?>(null) }
 
     val selectedTransaction by viewModel.selectedTransaction.collectAsState()
 
@@ -132,12 +217,20 @@ fun MainAppContent(
         currentScreen = route
     }
 
-    // Check PIN Lock
+    // Check PIN / Biometric Lock
     if (!isUnlocked) {
         PinLockScreen(
             securityManager = securityManager,
             isSettingPin = false,
-            onSuccess = { isUnlocked = true }
+            onRequestBiometric = {
+                bioErrorMessage = null
+                onRequestBiometric(
+                    { onUnlockChange(true) },
+                    { err -> bioErrorMessage = err }
+                )
+            },
+            externalErrorMessage = bioErrorMessage,
+            onSuccess = { onUnlockChange(true) }
         )
         return
     }
@@ -248,7 +341,8 @@ fun MainAppContent(
                 "SECURITY" -> SecuritySettingsScreen(
                     securityManager = securityManager,
                     onNavigateBack = { navigateBack() },
-                    onChangePinRequested = { isChangingPin = true }
+                    onChangePinRequested = { isChangingPin = true },
+                    onToggleHideAmounts = onToggleHideAmounts
                 )
 
                 "MORE" -> MoreSettingsScreen(
@@ -276,3 +370,4 @@ fun MainAppContent(
         }
     }
 }
+

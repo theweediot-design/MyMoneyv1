@@ -49,6 +49,9 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE isFlaggedForReview = 1 ORDER BY timestamp DESC")
     fun getFlaggedTransactions(): Flow<List<TransactionEntity>>
+
+    @Query("UPDATE transactions SET accountNumberLast4 = '', accountName = bankCode || ' - Unknown Account' WHERE accountNumberLast4 = '0000'")
+    suspend fun cleanFakeAccountTransactions()
 }
 
 @Dao
@@ -68,6 +71,9 @@ interface AccountDao {
 
     @Update
     suspend fun update(account: AccountEntity)
+
+    @Query("DELETE FROM accounts WHERE accountNumberLast4 = '0000'")
+    suspend fun deleteFakeAccounts()
 
     @Query("SELECT COUNT(*) FROM accounts")
     suspend fun getCount(): Int

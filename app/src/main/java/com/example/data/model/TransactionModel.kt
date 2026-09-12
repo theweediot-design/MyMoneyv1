@@ -20,6 +20,9 @@ enum class PaymentMethod(val displayName: String) {
     SALARY("Salary"),
     REFUND("Refund"),
     CASHBACK("Cashback"),
+    ECS("ECS"),
+    NACH("NACH"),
+    NETBANKING("Net Banking"),
     OTHER("Other")
 }
 

@@ -25,10 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,7 +63,6 @@ fun SmsAutoDetectionScreen(
     val isServiceActive by viewModel.isDetectionServiceActive.collectAsState()
     val scanProgress by viewModel.scanProgress.collectAsState()
 
-    var selectedSimulationScenario by remember { mutableIntStateOf(0) }
     var scanCompletedMessage by remember { mutableStateOf<String?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -228,89 +224,6 @@ fun SmsAutoDetectionScreen(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
-                }
-            }
-        }
-
-        // Simulation Card (For instant testing without real SMS)
-        item {
-            FintechCard(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Simulate Bank SMS (Test Drive)",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Simulate incoming SMS to test parsing and deduplication in real time:",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                val scenarios = listOf(
-                    "HDFC Swiggy UPI Debit (₹1,850)",
-                    "SBI Tech Labs Salary (₹32,000)",
-                    "ICICI Flipkart Card Debit (₹4,999)",
-                    "Duplicate UPI SMS Test (Same Ref)"
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    scenarios.forEachIndexed { idx, name ->
-                        val isSelected = selectedSimulationScenario == idx
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) EmeraldGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant)
-                                .border(1.dp, if (isSelected) EmeraldGreen else MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
-                                .clickable { selectedSimulationScenario = idx }
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .border(1.dp, if (isSelected) EmeraldGreen else Color.Gray, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isSelected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(EmeraldGreen)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = name,
-                                color = if (isSelected) EmeraldGreen else MaterialTheme.colorScheme.onSurface,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Button(
-                    onClick = { viewModel.simulateSms(selectedSimulationScenario) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = EmeraldGreen,
-                        contentColor = Color(0xFF042F24)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Trigger Simulation", fontWeight = FontWeight.Bold)
                 }
             }
         }

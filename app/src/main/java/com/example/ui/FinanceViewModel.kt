@@ -312,7 +312,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         for (tx in list) {
             cal.timeInMillis = tx.timestamp
             if (cal.get(Calendar.YEAR) == prevYear && cal.get(Calendar.MONTH) == prevMonth) {
-                if (tx.type == "CREDIT") prevCredit += tx.amount else debit += tx.amount
+                if (tx.type == "CREDIT") prevCredit += tx.amount else prevDebit += tx.amount
             }
         }
 
@@ -421,11 +421,74 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Monthly data for Bar Charts and Trends (Calculated dynamically for the previous 6 months)
-    val monthlyTrendsData: StateFlow<List<MonthlyBarData>> = allTransactions.combine(_trendsBank) { list, bankFilter ->
+    fun isTimestampInFilter(timestamp: Long, filter: String, startCustom: Long?, endCustom: Long?): Boolean {
+        val now = System.currentTimeMillis()
+        val cal = Calendar.getInstance()
+        return when (filter) {
+            "1M" -> {
+                cal.timeInMillis = now
+                cal.add(Calendar.MONTH, -1)
+                timestamp >= cal.timeInMillis
+            }
+            "3M" -> {
+                cal.timeInMillis = now
+                cal.add(Calendar.MONTH, -3)
+                timestamp >= cal.timeInMillis
+            }
+            "6M" -> {
+                cal.timeInMillis = now
+                cal.add(Calendar.MONTH, -6)
+                timestamp >= cal.timeInMillis
+            }
+            "1Y" -> {
+                cal.timeInMillis = now
+                cal.add(Calendar.YEAR, -1)
+                timestamp >= cal.timeInMillis
+            }
+            "Custom" -> {
+                val start = startCustom ?: 0L
+                val end = if (endCustom != null) endCustom + 86400000L - 1 else Long.MAX_VALUE
+                timestamp in start..end
+            }
+            else -> true
+        }
+    }
+
+    // Monthly data for Bar Charts and Trends (Calculated dynamically based on timeFilter)
+    val monthlyTrendsData: StateFlow<List<MonthlyBarData>> = combine(
+        allTransactions,
+        _trendsBank,
+        timeFilter,
+        customStartDate,
+        customEndDate
+    ) { params ->
+        val list = params[0] as List<TransactionEntity>
+        val bankFilter = params[1] as String
+        val tf = params[2] as String
+        val cStart = params[3] as Long?
+        val cEnd = params[4] as Long?
+
         val cal = Calendar.getInstance()
         val sdfShort = SimpleDateFormat("MMM", Locale.getDefault())
 
-        val months = (5 downTo 0).map { offset ->
+        val monthsCount = when (tf) {
+            "1M" -> 1
+            "3M" -> 3
+            "6M" -> 6
+            "1Y" -> 12
+            "Custom" -> {
+                if (cStart != null && cEnd != null) {
+                    val startCal = Calendar.getInstance().apply { timeInMillis = cStart }
+                    val endCal = Calendar.getInstance().apply { timeInMillis = cEnd }
+                    val diff = (endCal.get(Calendar.YEAR) - startCal.get(Calendar.YEAR)) * 12 +
+                            (endCal.get(Calendar.MONTH) - startCal.get(Calendar.MONTH)) + 1
+                    diff.coerceIn(1, 24)
+                } else 6
+            }
+            else -> 6
+        }
+
+        val months = (monthsCount - 1 downTo 0).map { offset ->
             val c = Calendar.getInstance().apply { add(Calendar.MONTH, -offset) }
             Triple(c.get(Calendar.YEAR), c.get(Calendar.MONTH), sdfShort.format(c.time))
         }
@@ -435,10 +498,12 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             var debit = 0.0
 
             for (tx in list) {
-                cal.timeInMillis = tx.timestamp
-                val matchBank = bankFilter == "All Banks" || tx.bankCode.equals(bankFilter, true) || tx.bankName.contains(bankFilter, true)
-                if (matchBank && cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
-                    if (tx.type == "CREDIT") credit += tx.amount else debit += tx.amount
+                if (isTimestampInFilter(tx.timestamp, tf, cStart, cEnd)) {
+                    cal.timeInMillis = tx.timestamp
+                    val matchBank = bankFilter == "All Banks" || tx.bankCode.equals(bankFilter, true) || tx.bankName.contains(bankFilter, true)
+                    if (matchBank && cal.get(Calendar.YEAR) == yr && cal.get(Calendar.MONTH) == mo) {
+                        if (tx.type == "CREDIT") credit += tx.amount else debit += tx.amount
+                    }
                 }
             }
 
@@ -476,17 +541,22 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     // Bank-wise Comparison data for Screen 4
     val bankWiseComparison: StateFlow<List<BankOverviewItem>> = combine(
         allTransactions,
-        selectedMonth,
-        analyticsTab
-    ) { list, month, tab ->
-        val cal = Calendar.getInstance()
+        analyticsTab,
+        timeFilter,
+        customStartDate,
+        customEndDate
+    ) { params ->
+        val list = params[0] as List<TransactionEntity>
+        val tab = params[1] as String
+        val tf = params[2] as String
+        val cStart = params[3] as Long?
+        val cEnd = params[4] as Long?
+
         val bankAmounts = mutableMapOf<String, Double>()
         val bankCountMap = mutableMapOf<String, Int>()
 
         for (tx in list) {
-            cal.timeInMillis = tx.timestamp
-            if (cal.get(Calendar.YEAR) == month.year && cal.get(Calendar.MONTH) == month.month) {
-                val code = tx.bankCode
+            if (isTimestampInFilter(tx.timestamp, tf, cStart, cEnd)) {
                 val matchesTab = when (tab) {
                     "CREDIT" -> tx.type == "CREDIT"
                     "DEBIT" -> tx.type == "DEBIT"
@@ -496,9 +566,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     val amt = if (tab == "NET") {
                         if (tx.type == "CREDIT") tx.amount else -tx.amount
                     } else tx.amount
+                    val code = tx.bankCode
                     bankAmounts[code] = (bankAmounts[code] ?: 0.0) + amt
+                    bankCountMap[code] = (bankCountMap[code] ?: 0) + 1
                 }
-                bankCountMap[code] = (bankCountMap[code] ?: 0) + 1
             }
         }
 
@@ -521,10 +592,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             "OTHERS" to "#64748B"
         )
 
-        val maxVal = bankAmounts.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+        val maxVal = bankAmounts.values.map { kotlin.math.abs(it) }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
 
         bankAmounts.entries
-            .filter { it.value > 0.0 }
+            .filter { if (tab == "NET") it.value != 0.0 else it.value > 0.0 }
             .sortedByDescending { it.value }
             .map { (code, amt) ->
                 BankOverviewItem(
@@ -532,7 +603,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     bankName = bankDisplayNames[code] ?: code,
                     colorHex = bankColors[code] ?: "#3B82F6",
                     totalAmount = amt,
-                    proportion = (amt / maxVal).toFloat().coerceIn(0.05f, 1.0f),
+                    proportion = (kotlin.math.abs(amt) / maxVal).toFloat().coerceIn(0.05f, 1.0f),
                     txCount = bankCountMap[code] ?: 0
                 )
             }
@@ -552,10 +623,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
             val res = smsScanner.scanInbox()
             onComplete?.invoke(res)
         }
-    }
-
-    fun simulateSms(scenario: Int) {
-        smsManager.simulateTestSms(scenario)
     }
 
     fun toggleSmsService(active: Boolean) {
