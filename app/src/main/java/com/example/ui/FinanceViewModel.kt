@@ -74,6 +74,15 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val smsManager = SmsDetectionManager.getInstance(application)
     private val bankPrefManager = BankPreferenceManager(application)
 
+    init {
+        viewModelScope.launch {
+            repository.sanitizeDatabase()
+        }
+    }
+
+    val hiddenAccountIds: StateFlow<Set<String>> = bankPrefManager.hiddenAccountIdsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     val allTransactions: StateFlow<List<TransactionEntity>> = repository.allTransactions
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -177,8 +186,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Visible accounts filtered strictly by active bank selection
+    // Visible accounts filtered strictly by active bank selection and validity
     // Does NOT delete accounts from Room DB; only filters in UI data streams
+    // Completely excludes any "Unknown Account" or phantom accounts without last4
     val visibleAccounts: StateFlow<List<AccountEntity>> = combine(
         allAccounts,
         selectedBanksFilter
@@ -186,9 +196,21 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         if (selectedBanks.isEmpty()) {
             emptyList()
         } else {
-            accounts.filter { isBankSelected(it.bankCode, selectedBanks) }
+            accounts.filter {
+                isBankSelected(it.bankCode, selectedBanks) &&
+                        it.accountNumberLast4.isNotBlank() &&
+                        !it.accountName.contains("Unknown", ignoreCase = true)
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleAccountHidden(account: AccountEntity) {
+        viewModelScope.launch {
+            val isCurrentlyHidden = hiddenAccountIds.value.contains(account.id.toString())
+            bankPrefManager.toggleAccountHidden(account.id, hiddenAccountIds.value)
+            repository.updateAccount(account.copy(isActive = isCurrentlyHidden))
+        }
+    }
 
     val detectionChecklist: StateFlow<LiveChecklistState> = smsManager.checklistState
     val isDetectionServiceActive: StateFlow<Boolean> = smsManager.isServiceActive

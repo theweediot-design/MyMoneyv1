@@ -20,6 +20,7 @@ class BankPreferenceManager(private val context: Context) {
     companion object {
         val KEY_ACTIVE_BANKS = stringSetPreferencesKey("active_banks_filter")
         val KEY_IS_USER_CONFIGURED = booleanPreferencesKey("is_user_configured")
+        val KEY_HIDDEN_ACCOUNT_IDS = stringSetPreferencesKey("hidden_account_ids")
     }
 
     /**
@@ -54,6 +55,44 @@ class BankPreferenceManager(private val context: Context) {
         .map { preferences ->
             preferences[KEY_IS_USER_CONFIGURED] ?: false
         }
+
+    val hiddenAccountIdsFlow: Flow<Set<String>> = context.bankDataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_HIDDEN_ACCOUNT_IDS] ?: emptySet()
+        }
+
+    suspend fun toggleAccountHidden(accountId: Long, currentHidden: Set<String>) {
+        val idStr = accountId.toString()
+        val updated = currentHidden.toMutableSet()
+        if (updated.contains(idStr)) {
+            updated.remove(idStr)
+        } else {
+            updated.add(idStr)
+        }
+        context.bankDataStore.edit { preferences ->
+            preferences[KEY_HIDDEN_ACCOUNT_IDS] = updated
+        }
+    }
+
+    suspend fun setAccountHidden(accountId: Long, isHidden: Boolean, currentHidden: Set<String>) {
+        val idStr = accountId.toString()
+        val updated = currentHidden.toMutableSet()
+        if (isHidden) {
+            updated.add(idStr)
+        } else {
+            updated.remove(idStr)
+        }
+        context.bankDataStore.edit { preferences ->
+            preferences[KEY_HIDDEN_ACCOUNT_IDS] = updated
+        }
+    }
 
     suspend fun saveActiveBanks(banks: Set<String>) {
         context.bankDataStore.edit { preferences ->

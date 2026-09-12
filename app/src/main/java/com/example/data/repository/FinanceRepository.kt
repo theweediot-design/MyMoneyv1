@@ -44,6 +44,117 @@ class FinanceRepository(private val database: AppDatabase) {
         accountDao.update(account)
     }
 
+    suspend fun sanitizeDatabase() = withContext(Dispatchers.IO) {
+        try {
+            // 1. Purge unknown and fake accounts
+            accountDao.deleteUnknownAccounts()
+            accountDao.deleteFakeAccounts()
+            transactionDao.cleanFakeAccountTransactions()
+
+            // 2. Re-classify existing transactions currently labeled as "OTHERS" or missing bank
+            val allTx = transactionDao.getAllTransactionsList()
+            val updatedTxList = mutableListOf<TransactionEntity>()
+
+            for (tx in allTx) {
+                var modified = false
+                var currentTx = tx
+
+                if (currentTx.bankCode == "OTHERS" && currentTx.rawSmsBody.isNotBlank()) {
+                    val (detectedCode, detectedName) = com.example.sms.SmsParser.identifyBank("", currentTx.rawSmsBody)
+                    if (detectedCode != "OTHERS") {
+                        currentTx = currentTx.copy(
+                            bankCode = detectedCode,
+                            bankName = detectedName
+                        )
+                        modified = true
+                    }
+                }
+
+                // If account number is blank, re-inspect SMS body for genuine bank AC pattern
+                if (currentTx.accountNumberLast4.isBlank() && currentTx.rawSmsBody.isNotBlank()) {
+                    val genuineLast4 = com.example.sms.SmsParser.extractAccountLast4(currentTx.rawSmsBody)
+                    if (genuineLast4.isNotBlank()) {
+                        currentTx = currentTx.copy(accountNumberLast4 = genuineLast4)
+                        modified = true
+                    }
+                }
+
+                if (modified) {
+                    updatedTxList.add(currentTx)
+                }
+            }
+
+            if (updatedTxList.isNotEmpty()) {
+                transactionDao.updateAll(updatedTxList)
+            }
+
+            // 3. Merge fragmented card/reference accounts into parent bank's primary account
+            val allAccounts = accountDao.getAccountsList()
+            val accountsToDelete = mutableListOf<Long>()
+            val txToReassign = mutableListOf<TransactionEntity>()
+            val refreshedTxList = transactionDao.getAllTransactionsList()
+
+            val accountsByBank = allAccounts.groupBy { it.bankCode }
+
+            for ((_, bankAccList) in accountsByBank) {
+                val validAccounts = bankAccList.filter {
+                    it.accountNumberLast4.isNotBlank() &&
+                            !it.accountName.contains("Unknown", ignoreCase = true) &&
+                            !it.accountName.contains("Card", ignoreCase = true)
+                }
+
+                val primaryAccount = validAccounts.firstOrNull()
+
+                if (primaryAccount != null) {
+                    for (acc in bankAccList) {
+                        if (acc.id == primaryAccount.id) continue
+
+                        val accTx = refreshedTxList.filter { it.accountId == acc.id }
+                        val isCardOrUnknown = acc.accountName.contains("Card", ignoreCase = true) ||
+                                acc.accountName.contains("Unknown", ignoreCase = true) ||
+                                acc.accountNumberLast4.isBlank() ||
+                                accTx.all { tx ->
+                                    tx.paymentMethod == "Card" ||
+                                            tx.rawSmsBody.contains("card ending", ignoreCase = true) ||
+                                            tx.rawSmsBody.contains("••••", ignoreCase = true) ||
+                                            com.example.sms.SmsParser.extractAccountLast4(tx.rawSmsBody).isBlank()
+                                }
+
+                        if (isCardOrUnknown && accTx.isNotEmpty()) {
+                            for (tx in accTx) {
+                                txToReassign.add(
+                                    tx.copy(
+                                        accountId = primaryAccount.id,
+                                        accountName = primaryAccount.accountName,
+                                        accountNumberLast4 = primaryAccount.accountNumberLast4
+                                    )
+                                )
+                            }
+                            accountsToDelete.add(acc.id)
+                        } else if (accTx.isEmpty() && (acc.accountNumberLast4.isBlank() || acc.accountName.contains("Unknown", ignoreCase = true))) {
+                            accountsToDelete.add(acc.id)
+                        }
+                    }
+                } else {
+                    for (acc in bankAccList) {
+                        if (acc.accountNumberLast4.isBlank() || acc.accountName.contains("Unknown", ignoreCase = true)) {
+                            accountsToDelete.add(acc.id)
+                        }
+                    }
+                }
+            }
+
+            if (txToReassign.isNotEmpty()) {
+                transactionDao.updateAll(txToReassign)
+            }
+            if (accountsToDelete.isNotEmpty()) {
+                accountDao.deleteByIds(accountsToDelete.distinct())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun exportTransactionsToCsv(context: Context, transactions: List<TransactionEntity>): Boolean = withContext(Dispatchers.IO) {
         try {
             val exportDir = File(context.cacheDir, "exports")

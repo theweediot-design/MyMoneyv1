@@ -55,6 +55,12 @@ interface TransactionDao {
 
     @Query("UPDATE transactions SET accountNumberLast4 = '', accountName = bankCode || ' - Unknown Account' WHERE accountNumberLast4 = '0000'")
     suspend fun cleanFakeAccountTransactions()
+
+    @Query("SELECT * FROM transactions ORDER BY timestamp DESC")
+    suspend fun getAllTransactionsList(): List<TransactionEntity>
+
+    @Update
+    suspend fun updateAll(transactions: List<TransactionEntity>)
 }
 
 @Dao
@@ -62,6 +68,9 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts ORDER BY bankCode ASC, accountName ASC")
     fun getAllAccounts(): Flow<List<AccountEntity>>
+
+    @Query("SELECT * FROM accounts ORDER BY bankCode ASC, accountName ASC")
+    suspend fun getAccountsList(): List<AccountEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(account: AccountEntity): Long
@@ -72,11 +81,23 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE bankCode = :bankCode AND accountNumberLast4 = :last4 LIMIT 1")
     suspend fun findAccount(bankCode: String, last4: String): AccountEntity?
 
+    @Query("SELECT * FROM accounts WHERE bankCode = :bankCode AND accountNumberLast4 != '' ORDER BY id ASC")
+    suspend fun findAccountsByBank(bankCode: String): List<AccountEntity>
+
     @Update
     suspend fun update(account: AccountEntity)
 
+    @Query("DELETE FROM accounts WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM accounts WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
     @Query("DELETE FROM accounts WHERE accountNumberLast4 = '0000'")
     suspend fun deleteFakeAccounts()
+
+    @Query("DELETE FROM accounts WHERE accountNumberLast4 = '' OR accountName LIKE '%Unknown%'")
+    suspend fun deleteUnknownAccounts()
 
     @Query("SELECT COUNT(*) FROM accounts")
     suspend fun getCount(): Int

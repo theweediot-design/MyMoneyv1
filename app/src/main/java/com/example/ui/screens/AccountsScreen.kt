@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +68,7 @@ fun AccountsScreen(
     val selectedBanks by viewModel.selectedBanksFilter.collectAsState()
     val allManageableBanks by viewModel.allManageableBanks.collectAsState()
     val showManageBanksDialog by viewModel.showManageBanksDialog.collectAsState()
+    val hiddenAccountIds by viewModel.hiddenAccountIds.collectAsState()
 
     var filterActiveOnly by remember { mutableStateOf(false) }
 
@@ -91,8 +94,12 @@ fun AccountsScreen(
         }
     }
 
-    val displayedAccounts = remember(accounts, filterActiveOnly) {
-        if (filterActiveOnly) accounts.filter { it.isActive } else accounts
+    val displayedAccounts = remember(accounts, filterActiveOnly, hiddenAccountIds) {
+        if (filterActiveOnly) {
+            accounts.filter { it.isActive && !hiddenAccountIds.contains(it.id.toString()) }
+        } else {
+            accounts
+        }
     }
 
     val groupedByBank = remember(displayedAccounts) {
@@ -216,7 +223,7 @@ fun AccountsScreen(
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "Active (${accounts.count { it.isActive }})",
+                            text = "Active (${accounts.count { it.isActive && !hiddenAccountIds.contains(it.id.toString()) }})",
                             color = if (filterActiveOnly) Color(0xFF042F24) else MaterialTheme.colorScheme.onSurface,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
@@ -294,6 +301,7 @@ fun AccountsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         bankAccounts.forEach { account ->
+                            val isHidden = !account.isActive || hiddenAccountIds.contains(account.id.toString())
                             val accountTx = allTransactions.filter { it.accountId == account.id }
                             val totalCredits = accountTx.filter { it.type == "CREDIT" }.sumOf { it.amount }
                             val totalDebits = accountTx.filter { it.type == "DEBIT" }.sumOf { it.amount }
@@ -303,7 +311,10 @@ fun AccountsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .background(
+                                        if (isHidden) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        else MaterialTheme.colorScheme.surfaceVariant
+                                    )
                                     .clickable {
                                         viewModel.selectAccount(account)
                                         onAccountClick(account)
@@ -312,16 +323,34 @@ fun AccountsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
-                                    Text(
-                                        text = account.accountName,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = account.accountName,
+                                            color = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        if (isHidden) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(MaterialTheme.colorScheme.surface)
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Hidden",
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "XXXX${account.accountNumberLast4}",
+                                        text = "••••${account.accountNumberLast4}",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 11.sp
                                     )
@@ -330,11 +359,22 @@ fun AccountsScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = inrFormat.format(displayBalance),
-                                        color = EmeraldGreen,
+                                        color = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else EmeraldGreen,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = { viewModel.toggleAccountHidden(account) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = if (isHidden) "Unhide Account" else "Hide Account",
+                                            tint = if (isHidden) MaterialTheme.colorScheme.onSurfaceVariant else EmeraldGreen,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                     Icon(
                                         imageVector = Icons.Default.ChevronRight,
                                         contentDescription = "Details",

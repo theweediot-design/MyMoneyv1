@@ -164,5 +164,75 @@ class SmsParserTest {
         assertEquals(com.example.data.model.TransactionType.CREDIT, parsed4.type)
         assertEquals(2200.0, parsed4.amount, 0.001)
     }
+
+    @Test
+    fun testCardDoesNotExtractAsAccount() {
+        val testCardBodies = listOf(
+            "INR 1,200.00 spent on your Kotak Card ending 6829 at AMAZON. Avl limit: Rs 40,000",
+            "Kotak Bank alert: Rs 550.00 debited for transaction on Card ending in 8184",
+            "Spent Rs 3,400.00 on your card ••••6820 at CROMA",
+            "IDFC FIRST Bank: Rs 4,500.00 spent on your Card ending 1122 at FLIPKART"
+        )
+
+        for (body in testCardBodies) {
+            val parsed = SmsParser.parse(body, "KOTAKB", System.currentTimeMillis())
+            assertEquals("Card numbers must never be extracted as bank account last4", "", parsed.accountNumberLast4)
+            assertEquals(com.example.data.model.PaymentMethod.CARD, parsed.paymentMethod)
+        }
+    }
+
+    @Test
+    fun testExplicitBankAccountsExtractCorrectly() {
+        val cases = listOf(
+            "Kotak Bank AC 3453 credited with Rs 500" to "3453",
+            "debited from a/c **9876 on 11-09-26" to "9876",
+            "A/C ...1234 credited by Rs 32,000.00" to "1234",
+            "debited from A/c no. XX5678 on 10-09-26" to "5678",
+            "Acct 4321 Dr: INR 450.00" to "4321",
+            "Account ...8899 credited" to "8899",
+            "Canara Bank A/c ending 7890 credited" to "7890"
+        )
+
+        for ((body, expectedLast4) in cases) {
+            val last4 = SmsParser.extractAccountLast4(body)
+            assertEquals("Failed for text: $body", expectedLast4, last4)
+        }
+    }
+
+    @Test
+    fun testTwoTierBankIdentification() {
+        // Tier A: Telecom prefix stripped from header
+        val headerCases = listOf(
+            "CP-FDRLBK" to "FEDERAL",
+            "VK-KOTAKB" to "KOTAK",
+            "VM-SBIINB" to "SBI",
+            "BZ-AXISBK" to "AXIS",
+            "AD-BOBTXN" to "BOB",
+            "JD-ICICIB" to "ICICI",
+            "AX-HDFCBK" to "HDFC",
+            "JK-YESBNK" to "YES",
+            "BP-PNBBNK" to "PNB"
+        )
+
+        for ((header, expectedBank) in headerCases) {
+            val (code, _) = SmsParser.identifyBank(header, "INR 500 debited from A/C 1234")
+            assertEquals("Failed for header $header", expectedBank, code)
+        }
+
+        // Tier B: Missing / generic header with body fallback
+        val bodyCases = listOf(
+            Pair("", "Federal Bank A/C ...9900 credited with Rs 2,500.00 via FedMobile") to "FEDERAL",
+            Pair("12345", "Your YONO SBI account has been debited by Rs 1,000.00") to "SBI",
+            Pair("", "Received Rs.2.00 in your Kotak Bank AC 3453 from ANKIT CHAUDHARY on 12-09-26.UPI Ref:625576937179") to "KOTAK",
+            Pair("UNKNOWN", "Bank of Baroda: Rs 500 debited from A/C 1234") to "BOB",
+            Pair("9876543210", "Canara Bank: Rs 750 debited from A/C 4321") to "CANARA",
+            Pair("", "Rs 200 debited from your account via UPI Ref 123456") to "OTHERS"
+        )
+
+        for ((input, expectedBank) in bodyCases) {
+            val (code, _) = SmsParser.identifyBank(input.first, input.second)
+            assertEquals("Failed for body fallback: ${input.second}", expectedBank, code)
+        }
+    }
 }
 

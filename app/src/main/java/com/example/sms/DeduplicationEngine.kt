@@ -96,27 +96,49 @@ class DeduplicationEngine(
             }
         }
 
-        // 3. Stage 3: Distinct transaction - resolve or create account
+        // 3. Stage 3: Distinct transaction - resolve or create explicit bank account only
         val cleanLast4 = parsed.accountNumberLast4.trim()
-        val existingAccount = accountDao.findAccount(parsed.bankCode, cleanLast4)
-        val (accountId, accountName) = if (existingAccount != null) {
-            existingAccount.id to existingAccount.accountName
-        } else {
-            val formattedName = if (cleanLast4.isNotBlank()) {
-                "${parsed.bankCode} - Account ••••$cleanLast4"
+        val accountId: Long
+        val accountName: String
+        val txLast4: String
+
+        if (cleanLast4.isNotBlank()) {
+            // Explicit bank account found in SMS
+            val existingAccount = accountDao.findAccount(parsed.bankCode, cleanLast4)
+            if (existingAccount != null) {
+                accountId = existingAccount.id
+                accountName = existingAccount.accountName
+                txLast4 = existingAccount.accountNumberLast4
             } else {
-                "${parsed.bankCode} - Unknown Account"
+                val formattedName = "${parsed.bankCode} - Account ••••$cleanLast4"
+                val newAcc = AccountEntity(
+                    bankCode = parsed.bankCode,
+                    bankName = parsed.bankName,
+                    accountName = formattedName,
+                    accountNumberLast4 = cleanLast4,
+                    accountType = if (parsed.categoryName.equals("Salary", ignoreCase = true)) "SALARY" else "SAVINGS",
+                    isActive = true
+                )
+                accountId = accountDao.insert(newAcc)
+                accountName = formattedName
+                txLast4 = cleanLast4
             }
-            val newAcc = AccountEntity(
-                bankCode = parsed.bankCode,
-                bankName = parsed.bankName,
-                accountName = formattedName,
-                accountNumberLast4 = cleanLast4,
-                accountType = if (parsed.categoryName.equals("Salary", ignoreCase = true)) "SALARY" else "SAVINGS",
-                isActive = true
-            )
-            val newId = accountDao.insert(newAcc)
-            newId to formattedName
+        } else {
+            // No explicit bank account in SMS (e.g. Card transaction, UPI Ref alert, or generic notification)
+            // Associate with the existing primary bank account of this bank if one exists
+            val existingBankAccounts = accountDao.findAccountsByBank(parsed.bankCode)
+            if (existingBankAccounts.isNotEmpty()) {
+                val primary = existingBankAccounts.first()
+                accountId = primary.id
+                accountName = primary.accountName
+                txLast4 = primary.accountNumberLast4
+            } else {
+                // No explicit account exists yet for this bank.
+                // NEVER create an "Unknown Account" or phantom card entity in the database!
+                accountId = 0L
+                accountName = parsed.bankName
+                txLast4 = ""
+            }
         }
 
         val newTransaction = TransactionEntity(
@@ -126,7 +148,7 @@ class DeduplicationEngine(
             bankName = parsed.bankName,
             accountId = accountId,
             accountName = accountName,
-            accountNumberLast4 = cleanLast4,
+            accountNumberLast4 = txLast4,
             paymentMethod = parsed.paymentMethod.displayName,
             merchant = parsed.merchant,
             refNumber = parsed.refNumber,

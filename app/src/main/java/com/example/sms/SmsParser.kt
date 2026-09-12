@@ -85,9 +85,15 @@ object SmsParser {
         Pattern.CASE_INSENSITIVE
     )
 
-    // Account last 3 or 4 digits
-    private val ACCOUNT_PATTERN = Pattern.compile(
-        """(?:\ba/?c\b|acct|account|card|ending|xx)\s*(?:no\.?|num)?\s*[:\s#]*[xX*.]*(\d{3,4})""",
+    // Strict Bank Account number pattern (A/C, AC, Account, a/c no., acct - NEVER matches cards)
+    private val BANK_ACCOUNT_PATTERN = Pattern.compile(
+        """\b(?:a/?c|ac|acct|account)(?:\s*no\.?|\s*num|\s*ending|\s*ending\s*in)?\s*[:\s#.]*[xX*.]*(\d{3,4})\b""",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    // Card pattern (used for payment method / card recognition, NEVER creates an account)
+    private val CARD_PATTERN = Pattern.compile(
+        """\b(?:card|credit\s*card|debit\s*card)(?:\s*ending|\s*ending\s*in|\s*no\.?)?\s*[:\s#.]*[xX*.]*(\d{3,4})\b""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -195,8 +201,8 @@ object SmsParser {
             else -> determinePrecedence(lowerBody)
         }
 
-        // Rule 7: Identify Bank reliably
-        val (bankCode, bankName) = identifyBank(lowerSender, lowerBody)
+        // Rule 7: Identify Bank reliably (Step A: Header, Step B: Body Fallback)
+        val (bankCode, bankName) = identifyBank(sender, body)
 
         // Rule 8: Extract Account Last 4 (Strict: never fabricate "0000")
         val last4 = extractAccountLast4(body)
@@ -337,52 +343,174 @@ object SmsParser {
         }
     }
 
-    private fun identifyBank(lowerSender: String, lowerBody: String): Pair<String, String> {
-        return when {
-            lowerSender.contains("sbi") || lowerSender.contains("sbin") || lowerSender.contains("atmsbi") || lowerBody.contains("state bank of india") || lowerBody.contains("sbi") ->
-                "SBI" to "State Bank of India"
-            lowerSender.contains("hdfc") || lowerSender.contains("hdfcbk") || lowerSender.contains("hdfcbn") || lowerBody.contains("hdfc") ->
-                "HDFC" to "HDFC Bank"
-            lowerSender.contains("icici") || lowerSender.contains("icicib") || lowerSender.contains("icicit") || lowerBody.contains("icici") ->
-                "ICICI" to "ICICI Bank"
-            lowerSender.contains("axis") || lowerSender.contains("axisbk") || lowerSender.contains("axisbn") || lowerSender.contains("utibr") || lowerBody.contains("axis") ->
-                "AXIS" to "Axis Bank"
-            lowerSender.contains("kotak") || lowerSender.contains("kotakb") || lowerSender.contains("kmbl") || lowerSender.contains("kmb") || lowerBody.contains("kotak") ->
-                "KOTAK" to "Kotak Mahindra Bank"
-            lowerSender.contains("pnb") || lowerSender.contains("pnbsms") || lowerSender.contains("punbn") || lowerBody.contains("punjab national") || lowerBody.contains("pnb") ->
-                "PNB" to "Punjab National Bank"
-            lowerSender.contains("bob") || lowerSender.contains("bobsms") || lowerSender.contains("barb") || lowerBody.contains("bank of baroda") || lowerBody.contains("baroda") ->
-                "BOB" to "Bank of Baroda"
-            lowerSender.contains("canara") || lowerSender.contains("canbnk") || lowerSender.contains("cnrb") || lowerBody.contains("canara") ->
-                "CANARA" to "Canara Bank"
-            lowerSender.contains("union") || lowerSender.contains("ubisms") || lowerSender.contains("unionb") || lowerSender.contains("ubin") || lowerBody.contains("union bank") ->
-                "UNION" to "Union Bank of India"
-            lowerSender.contains("indbnk") || lowerSender.contains("idib") || lowerSender.contains("indianb") || lowerBody.contains("indian bank") ->
-                "INDIAN" to "Indian Bank"
-            lowerSender.contains("cbisms") || lowerSender.contains("cbin") || lowerBody.contains("central bank") ->
-                "CENTRAL" to "Central Bank of India"
-            lowerSender.contains("indus") || lowerSender.contains("indbk") || lowerSender.contains("indb") || lowerBody.contains("indusind") ->
-                "INDUSIND" to "IndusInd Bank"
-            lowerSender.contains("idfc") || lowerSender.contains("idfcpb") || lowerSender.contains("idfcfb") || lowerBody.contains("idfc") ->
-                "IDFC" to "IDFC FIRST Bank"
-            lowerSender.contains("yes") || lowerSender.contains("yesbnk") || lowerSender.contains("yesb") || lowerBody.contains("yes bank") ->
-                "YES" to "YES Bank"
-            lowerSender.contains("fed") || lowerSender.contains("fedbnk") || lowerSender.contains("fdrl") || lowerBody.contains("federal bank") ->
-                "FEDERAL" to "Federal Bank"
-            lowerSender.contains("bndhn") || lowerSender.contains("bndhan") || lowerSender.contains("bandhan") || lowerBody.contains("bandhan") ->
-                "BANDHAN" to "Bandhan Bank"
-            lowerSender.contains("paytm") || lowerSender.contains("pytm") || lowerBody.contains("paytm") ->
-                "PAYTM" to "Paytm Payments Bank"
-            lowerSender.contains("airtel") || lowerSender.contains("airtelpb") || lowerBody.contains("airtel payments") || lowerBody.contains("airtel bank") ->
-                "AIRTEL" to "Airtel Payments Bank"
-            lowerSender.contains("aufinb") || lowerSender.contains("aubank") || lowerSender.contains("aubk") || lowerBody.contains("au small finance") || lowerBody.contains("au bank") ->
-                "AU" to "AU Small Finance Bank"
-            else -> "OTHERS" to "Other Bank"
+    data class BankMeta(
+        val code: String,
+        val name: String,
+        val headers: List<String>,
+        val bodyKeywords: List<String>
+    )
+
+    val INDIAN_BANK_REGISTRY = listOf(
+        BankMeta(
+            code = "SBI",
+            name = "State Bank of India",
+            headers = listOf("SBIINB", "SBIPAY", "ATMSBI", "SBMSMS", "SBINB", "SBIUPI", "SBIN", "SBI"),
+            bodyKeywords = listOf("State Bank of India", "SBI", "YONO")
+        ),
+        BankMeta(
+            code = "KOTAK",
+            name = "Kotak Mahindra Bank",
+            headers = listOf("KOTAKB", "KMBL", "KOTAK", "KMB"),
+            bodyKeywords = listOf("Kotak Bank", "Kotak Mahindra", "KMBL", "Kotak")
+        ),
+        BankMeta(
+            code = "HDFC",
+            name = "HDFC Bank",
+            headers = listOf("HDFCBK", "HDFCBN", "HDFCCC", "HDFCPY", "HDFC"),
+            bodyKeywords = listOf("HDFC Bank", "HDFC")
+        ),
+        BankMeta(
+            code = "ICICI",
+            name = "ICICI Bank",
+            headers = listOf("ICICIB", "ICICIT", "ICICAC", "ICICI"),
+            bodyKeywords = listOf("ICICI Bank", "iMobile", "ICICI")
+        ),
+        BankMeta(
+            code = "AXIS",
+            name = "Axis Bank",
+            headers = listOf("AXISBK", "AXISBN", "AXISCC", "AXIS", "UTIBR"),
+            bodyKeywords = listOf("Axis Bank", "Axis")
+        ),
+        BankMeta(
+            code = "FEDERAL",
+            name = "Federal Bank",
+            headers = listOf("FEDBNK", "FDRLBK", "FEDERAL", "FEDRAL", "FEDBK", "FDRL", "FED"),
+            bodyKeywords = listOf("Federal Bank", "FedMobile", "FedNet")
+        ),
+        BankMeta(
+            code = "PNB",
+            name = "Punjab National Bank",
+            headers = listOf("PNBBNK", "PUNJAB", "PNBSMS", "PNBONE", "PUNBN", "PNB"),
+            bodyKeywords = listOf("Punjab National Bank", "PNB")
+        ),
+        BankMeta(
+            code = "BOB",
+            name = "Bank of Baroda",
+            headers = listOf("BOBTXN", "BARODA", "BOBSMS", "BOBPAY", "BARB", "BOB"),
+            bodyKeywords = listOf("Bank of Baroda", "BOB", "Baroda")
+        ),
+        BankMeta(
+            code = "CANARA",
+            name = "Canara Bank",
+            headers = listOf("CANBNK", "CNRBNK", "CANARA", "CNRB"),
+            bodyKeywords = listOf("Canara Bank", "Canara")
+        ),
+        BankMeta(
+            code = "UNION",
+            name = "Union Bank of India",
+            headers = listOf("UBINBK", "UNIONB", "UNIONS", "UBISMS", "UBIN"),
+            bodyKeywords = listOf("Union Bank of India", "Union Bank", "UBI")
+        ),
+        BankMeta(
+            code = "INDIAN",
+            name = "Indian Bank",
+            headers = listOf("INDBNK", "INDBN", "IDIB", "INDIANB"),
+            bodyKeywords = listOf("Indian Bank")
+        ),
+        BankMeta(
+            code = "CENTRAL",
+            name = "Central Bank of India",
+            headers = listOf("CBISMS", "CENTBK", "CBINBK", "CBIN"),
+            bodyKeywords = listOf("Central Bank of India", "Central Bank")
+        ),
+        BankMeta(
+            code = "INDUSIND",
+            name = "IndusInd Bank",
+            headers = listOf("INDUSB", "INDUS", "INDBK", "INDB"),
+            bodyKeywords = listOf("IndusInd Bank", "IndusInd")
+        ),
+        BankMeta(
+            code = "IDFC",
+            name = "IDFC FIRST Bank",
+            headers = listOf("IDFCFB", "IDFCBK", "IDFC", "IDFCPB"),
+            bodyKeywords = listOf("IDFC FIRST Bank", "IDFC FIRST", "IDFC")
+        ),
+        BankMeta(
+            code = "YES",
+            name = "YES Bank",
+            headers = listOf("YESBNK", "YESBK", "YESB"),
+            bodyKeywords = listOf("YES Bank", "YES BANK")
+        ),
+        BankMeta(
+            code = "BANDHAN",
+            name = "Bandhan Bank",
+            headers = listOf("BNDHNB", "BNDHN", "BANDHN", "BNDHAN"),
+            bodyKeywords = listOf("Bandhan Bank")
+        ),
+        BankMeta(
+            code = "PAYTM",
+            name = "Paytm Payments Bank",
+            headers = listOf("PAYTMB", "PYTMBN", "PAYTM", "PYTM"),
+            bodyKeywords = listOf("Paytm Payments Bank", "Paytm Bank", "Paytm")
+        ),
+        BankMeta(
+            code = "AIRTEL",
+            name = "Airtel Payments Bank",
+            headers = listOf("AIRTEL", "AIRPAY", "AIRTELPB"),
+            bodyKeywords = listOf("Airtel Payments Bank", "Airtel Bank")
+        ),
+        BankMeta(
+            code = "AU",
+            name = "AU Small Finance Bank",
+            headers = listOf("AUFINB", "AUBANK", "AUSFBL", "AUBK"),
+            bodyKeywords = listOf("AU Small Finance Bank", "AU Bank")
+        )
+    )
+
+    fun identifyBank(rawSender: String, body: String): Pair<String, String> {
+        val cleanSender = rawSender.trim().uppercase(Locale.ROOT)
+
+        // Step A: Sender Header Identification (DLT header matching ignoring telecom prefixes like VM-, VK-, AX-, etc.)
+        if (cleanSender.isNotBlank()) {
+            val candidates = mutableListOf<String>()
+            if (cleanSender.contains('-')) {
+                val suffix = cleanSender.substringAfterLast('-').trim()
+                if (suffix.isNotBlank()) candidates.add(suffix)
+            }
+            val stripped = cleanSender.replace("-", "").trim()
+            candidates.add(stripped)
+            if (stripped.length >= 6) {
+                candidates.add(stripped.drop(2))
+            }
+
+            for (bank in INDIAN_BANK_REGISTRY) {
+                val matched = candidates.any { candidate ->
+                    bank.headers.any { h ->
+                        val uh = h.uppercase(Locale.ROOT)
+                        candidate == uh || candidate.endsWith(uh) || candidate.contains(uh)
+                    }
+                }
+                if (matched) {
+                    return bank.code to bank.name
+                }
+            }
         }
+
+        // Step B: SMS Body Fallback (case-insensitive keyword search with word boundaries)
+        for (bank in INDIAN_BANK_REGISTRY) {
+            for (kw in bank.bodyKeywords) {
+                val pattern = Pattern.compile("""\b${Pattern.quote(kw)}\b""", Pattern.CASE_INSENSITIVE)
+                if (pattern.matcher(body).find()) {
+                    return bank.code to bank.name
+                }
+            }
+        }
+
+        return "OTHERS" to "Other Bank"
     }
 
-    private fun extractAccountLast4(body: String): String {
-        val matcher = ACCOUNT_PATTERN.matcher(body)
+    fun extractAccountLast4(body: String): String {
+        val matcher = BANK_ACCOUNT_PATTERN.matcher(body)
         if (matcher.find()) {
             val digits = matcher.group(1)
             if (digits != null && digits.length in 3..4) {
@@ -404,7 +532,7 @@ object SmsParser {
             lowerBody.contains("ecs") -> PaymentMethod.ECS
             lowerBody.contains("nach") -> PaymentMethod.NACH
             lowerBody.contains("netbanking") || lowerBody.contains("net banking") || lowerBody.contains("internet banking") -> PaymentMethod.NETBANKING
-            lowerBody.contains("card") || lowerBody.contains("credit card") || lowerBody.contains("debit card") || lowerBody.contains("ending") -> PaymentMethod.CARD
+            CARD_PATTERN.matcher(lowerBody).find() || lowerBody.contains("card") || lowerBody.contains("credit card") || lowerBody.contains("debit card") -> PaymentMethod.CARD
             lowerBody.contains("refund") -> PaymentMethod.REFUND
             lowerBody.contains("cashback") -> PaymentMethod.CASHBACK
             else -> PaymentMethod.OTHER
